@@ -6,7 +6,8 @@ in order to retrieve the vertical indexing of the stations
 import numpy as np
 from metpy.units import units
 import metpy.calc as mpcalc
-
+Rd = 287.05
+g  = 9.80665
 def metpy_pressure_to_height_dynamic(p_prof_Pa, T_prof_K, qv=None, RH=None,
                                      p_ref_Pa=None, z_ref_m=0.0):
     p_prof_Pa = np.asarray(p_prof_Pa)
@@ -54,9 +55,9 @@ def metpy_find_level_index(p_prof_Pa, T_prof_K, station_alt_m,
         z_ref_m=station_alt_m,
     ).m
 
-    idx = int(np.argmin(np.abs(z_prof - station_alt_m)))
-    p_hPa = p_prof_Pa[idx] / 100.0
-    return idx, p_hPa, z_prof[idx]
+    vertical_idx = int(np.argmin(np.abs(z_prof - station_alt_m)))
+    p_hPa = p_prof_Pa[vertical_idx] / 100.0
+    return vertical_idx, p_hPa, z_prof[vertical_idx]
 
 def altitude_to_pressure_ISA(z_m):
     """Convert altitude (m) to pressure (Pa) using standard barometric formula (ISA troposphere).

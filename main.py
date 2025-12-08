@@ -10,10 +10,12 @@ import xarray as xr
 from vertical_indexing import metpy_find_level_index
 from stations_utils import load_stations, select_station
 from horizontal_indexing import nearest_grid_index
-from file_utils import stations_path, species_file, T_file, pl_file
+from file_utils import stations_path, species_file, T_file, pl_file,species
+#%%
 def main():
     idx=45
     name=None 
+    cell_nums = 8
     stations = load_stations(stations_path)
     station = select_station(stations, idx)
     lat_s = float(station["Latitude"])
@@ -23,13 +25,62 @@ def main():
     ds_T = xr.open_dataset(T_file)
     ds_PL = xr.open_dataset(pl_file)
     print(f"\nSelected station: {name} (lat={lat_s}, lon={lon_s}, alt={alt_s} m)")
-    print(ds_T)
+
     lats = ds_species['lat'].values
     lons = ds_species['lon'].values
     i,j= nearest_grid_index(lat_s,lon_s,lats,lons)
     print(f"\n The station falls into the grid cell with lat index= {i},lon index= {j}")
-    # extract 1D profiles
+    if np.ndim(lats) == 1:
+        Ny = lats.shape[0]
+        Nx = lons.shape[0]
+    else:
+        Ny, Nx = lats.shape
+
+    i1, i2 = max(0, i-cell_nums), min(Ny-1, i+cell_nums)
+    j1, j2 = max(0, j-cell_nums), min(Nx-1, j+cell_nums)
+
+    print(f"\nLoading domain subset: i={i1}:{i2}, j={j1}:{j2} for plotting")
+    
+    ds_big = ds_species
+
+    # Coordinates
+    lats_big = ds_big['lat'].values
+    lons_big = ds_big['lon'].values
+
+# --- CASE 1: 1D lat/lon ---
+    if lats_big.ndim == 1 and lons_big.ndim == 1:
+
+        ds_small = ds_big.isel({'lat': slice(i1, i2+1),
+                            'lon': slice(j1, j2+1)})
+
+        lats_small = lats_big[i1:i2+1]
+        lons_small = lons_big[j1:j2+1]
+
+# --- CASE 2: 2D lat/lon ---
+    else:
+       ds_small = ds_big.isel({'lat': slice(i1, i2+1),
+                            'lon': slice(j1, j2+1)})
+
+       lats_small = lats_big[i1:i2+1, j1:j2+1]
+       lons_small = lons_big[i1:i2+1, j1:j2+1]
+
+# variable extraction
+    var_name = species
+    #data_arr = ds_small[var_name].isel({'time': 0,
+                                  #  'lev': vertical_idx}).values
+
+# free memory
+    #ds_big.close()
+    #del ds_big
+# local (station) indices in the small box
+    ii = i - i1
+    jj = j - j1
     T_prof = ds_T["T"].values[0, :, i, j]
+    print(T_prof)
+# %%
+'''Ny, Nx = data_arr.shape
+    # extract 1D profiles
+    '''T_prof = ds_T["T"].values[0, :, i, j]
     
     p_prof = ds_PL["PL"].values[0, :, i, j]
 
@@ -43,8 +94,9 @@ def main():
     print("Nearest model level:", idx)
     print("Pressure (hPa):", p_level)
     print("Height (m):", z_level)
-    
-
+    '''
+'''
+#%%
 if __name__ == "__main__":
     main()
 
