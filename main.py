@@ -75,28 +75,21 @@ def main():
 # local (station) indices in the small box
     ii = i - i1
     jj = j - j1
+    # Extract local profiles
     T_prof = ds_T["T"].values[0, :, i, j]
-    print(T_prof)
-# %%
-'''Ny, Nx = data_arr.shape
-    # extract 1D profiles
-    '''T_prof = ds_T["T"].values[0, :, i, j]
-    
-    p_prof = ds_PL["PL"].values[0, :, i, j]
+    p_prof = ds_PL["PL"].values[0, :, i, j]  # Pa
 
-    # call your vertical function
-    idx, p_level, z_level = metpy_find_level_index(
+    # --- NEW: MetPy-based vertical level selection ---
+    idx_level, p_level_hPa, z_level_m = metpy_find_level_index(
         p_prof_Pa=p_prof,
         T_prof_K=T_prof,
         station_alt_m=alt_s
     )
 
-    print("Nearest model level:", idx)
-    print("Pressure (hPa):", p_level)
-    print("Height (m):", z_level)
-    '''
-'''
-#%%
+    print("Nearest model level:", idx_level)
+    print("Pressure (hPa):", p_level_hPa)
+    print("Height (m):", z_level_m)
+
 if __name__ == "__main__":
     main()
 
