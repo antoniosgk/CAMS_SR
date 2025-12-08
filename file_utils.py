@@ -1,5 +1,9 @@
+'''
+This file_utils.py is used in order to construct the paths of the stations file
+the species,the temperature and the pressure
+'''
 import pathlib
-stations_file = "/home/agkiokas/CAMS/CHINESE_STATIONS_INFO_2015_2023.txt"  # your stations table
+stations_path = "/home/agkiokas/CAMS/CHINESE_STATIONS_INFO_2015_2023.txt"  # your stations table
 base_path = "/mnt/store01/agkiokas/CAMS/inst"
 
 # species and dataset naming convention

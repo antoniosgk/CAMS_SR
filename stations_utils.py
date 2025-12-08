@@ -1,7 +1,11 @@
-def load_stations(path):
+#%%
+import pandas as pd
+from file_utils import base_path,stations_path
+#%%
+def load_stations(stations_path):
     """Load station table. Expects tab-separated with Station_Name, Latitude, Longitude, Altitude.
        Renames index to 'idx'."""
-    df = pd.read_csv(path, sep="\t")
+    df = pd.read_csv(stations_path, sep="\t")
     df = df.reset_index().rename(columns={"index": "idx"})
     # Attempt normalization of column names: Cases if the names are not those expected,not needed as
     #we know the names of the columns a priori
@@ -40,3 +44,4 @@ def select_station(df, idx=None, name=None):
         return row.iloc[0]
 
     raise ValueError(f"Station '{s}' not found.")
+# %%
