@@ -7,6 +7,7 @@ import numpy as np
 import metpy.calc as mpcalc
 from metpy.units import units
 from metpy.constants import Rd, g  
+
 def metpy_compute_heights(p_prof_Pa, T_prof_K, qv=None, RH=None, z0=0.0):
     """
     Compute geometric heights from pressure + temperature using the hypsometric equation
@@ -55,37 +56,75 @@ def metpy_compute_heights(p_prof_Pa, T_prof_K, qv=None, RH=None, z0=0.0):
     else:
         Tv = T
 
-    # Allocate height array with meter units
-    z = np.zeros_like(Tv.magnitude) * units.meter
-    z[-1] = z0 * units.meter
+    nlev = len(p)
+    z = np.empty(nlev) * units.meter
 
-    # Hypsometric integration for top-to-bottom pressure indexing
-    for k in range(len(p) - 2, -1, -1):
+    # Find index of maximum pressure (assume this is "surface")
+    k_surf = int(np.argmax(p.magnitude))
+    z[k_surf] = z0 * units.meter  # anchor at model surface
+
+    # Integrate upward (towards lower pressure)
+    for k in range(k_surf - 1, -1, -1):
         Tv_layer = 0.5 * (Tv[k + 1] + Tv[k])
         dz = (Rd * Tv_layer / g) * np.log(p[k + 1] / p[k])
         z[k] = z[k + 1] + dz
+
+    # Integrate downward (if any levels have p > surface)
+    for k in range(k_surf + 1, nlev):
+        Tv_layer = 0.5 * (Tv[k - 1] + Tv[k])
+        dz = (Rd * Tv_layer / g) * np.log(p[k - 1] / p[k])
+        z[k] = z[k - 1] + dz
 
     return z.magnitude
 
 
 def metpy_find_level_index(p_prof_Pa, T_prof_K, station_alt_m,
-                           qv=None, RH=None):
-    """Return nearest model level to station altitude using MetPy heights."""
+                           qv=None, RH=None, z_surf_model=0.0):
+    """
+    Return nearest model level to station altitude using MetPy heights.
 
+    z_surf_model : float
+        Model surface height (m) at the grid cell, derived from PHIS.
+    """
+
+    # Compute height profile anchored at model surface
     z_prof = metpy_compute_heights(
         p_prof_Pa=p_prof_Pa,
         T_prof_K=T_prof_K,
         qv=qv,
         RH=RH,
-        z0=0.0,
+        z0=z_surf_model,
     )  # plain meters (ndarray)
 
-    # station_alt_m should be in meters as a plain float
+    # Basic vertical diagnostics
+    p_hPa_prof = p_prof_Pa / 100.0
+    print("DEBUG: p_prof range (hPa):", float(p_hPa_prof.min()), "→", float(p_hPa_prof.max()))
+    print("DEBUG: z_prof range (m):", float(z_prof.min()), "→", float(z_prof.max()))
+    print("DEBUG: few levels near surface (by max pressure index):")
+
+    k_surf = int(np.argmax(p_prof_Pa))
+    for k in range(max(0, k_surf - 2), min(len(z_prof), k_surf + 3)):
+        print(f"  k={k:2d}: p={p_hPa_prof[k]:7.2f} hPa, z={z_prof[k]:8.1f} m")
+
+    # station_alt_m should be in meters above sea level
     vertical_idx = int(np.argmin(np.abs(z_prof - station_alt_m)))
+
+    # Distance between station altitude and nearest model level
+    diff = abs(z_prof[vertical_idx] - station_alt_m)
+    if diff > 1500.0:
+        print(f"WARNING: nearest model level is {diff:.0f} m away from station altitude")
+
+    # Standard atmosphere check at station height (sanity only)
+    p_std = mpcalc.height_to_pressure_std(station_alt_m * units.meter)
+    print("DEBUG: Standard atmosphere pressure at station height:",
+          p_std.to('hectopascal'))
 
     p_hPa = p_prof_Pa[vertical_idx] / 100.0  # Pa -> hPa
 
     return vertical_idx, p_hPa, z_prof[vertical_idx]
+
+
+    
 def altitude_to_pressure_ISA(z_m):
     """Convert altitude (m) to pressure (Pa) using standard barometric formula (ISA troposphere).
        Good approximation for typical surface altitudes."""

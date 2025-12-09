@@ -20,3 +20,6 @@ pl_file = pathlib.Path(f"{base_path}/PL/{product}_{date}_{time}.nc4")
 
 # Path construction for Temperature file
 T_file = pathlib.Path(f"{base_path}/T/{product}_{date}_{time}.nc4")
+
+#Orography file
+orog_file="/mnt/store01/agkiokas/CAMS/inst/const/file.nc"
