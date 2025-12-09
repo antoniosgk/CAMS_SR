@@ -79,7 +79,7 @@ def main():
     T_prof = ds_T["T"].values[0, :, i, j]
     p_prof = ds_PL["PL"].values[0, :, i, j]  # Pa
 
-    # --- NEW: MetPy-based vertical level selection ---
+    #  MetPy-based vertical level selection ---
     idx_level, p_level_hPa, z_level_m = metpy_find_level_index(
         p_prof_Pa=p_prof,
         T_prof_K=T_prof,
