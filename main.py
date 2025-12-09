@@ -16,7 +16,7 @@ from horizontal_indexing import nearest_grid_index
 from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file
 #%%
 def main():
-    idx=1409
+    idx=2
     name=None 
     cell_nums = 8
     stations = load_stations(stations_path)
@@ -24,7 +24,7 @@ def main():
     lat_s = float(station["Latitude"])
     lon_s = float(station["Longitude"])
     alt_s = float(station["Altitude"])
-
+    name=station["Station_Name"]
     ds_species=xr.open_dataset(species_file)
     ds_T = xr.open_dataset(T_file)
     ds_PL = xr.open_dataset(pl_file)
