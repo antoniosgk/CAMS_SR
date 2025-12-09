@@ -131,7 +131,7 @@ def main():
     print("Height (m):", z_level_m)
 
     # --- NEW: compute and print levels for *all* stations ---
-    #all_stations(ds_species, ds_T, ds_PL, ds_orog)
+    #all_stations()
 #%%
 
 if __name__ == "__main__":
