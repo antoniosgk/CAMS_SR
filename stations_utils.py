@@ -44,4 +44,76 @@ def select_station(df, idx=None, name=None):
         return row.iloc[0]
 
     raise ValueError(f"Station '{s}' not found.")
-# %%
+
+def all_stations(ds_species, ds_T, ds_PL, ds_orog):
+    """
+    Loop over all stations, compute the nearest model level for each station,
+    and print the result.
+
+    Parameters
+    ----------
+    ds_species : xarray.Dataset
+        Dataset that contains 'lat' and 'lon' (for horizontal grid).
+    ds_T : xarray.Dataset
+        Dataset that contains temperature field 'T' with dims ('time','lev','lat','lon').
+    ds_PL : xarray.Dataset
+        Dataset that contains pressure field 'PL' with dims ('time','lev','lat','lon').
+    ds_orog : xarray.Dataset
+        Dataset that contains orography fields 'PHIS' (and optionally 'SGH').
+    """
+    import numpy as np
+    from metpy.units import units
+    from metpy.constants import g
+    from vertical_indexing import metpy_find_level_index
+    from horizontal_indexing import nearest_grid_index
+    from file_utils import stations_path
+
+    # Load stations table
+    stations = load_stations(stations_path)
+
+    # Horizontal grid
+    lats = ds_species["lat"].values
+    lons = ds_species["lon"].values
+
+    # Orography fields
+    PHIS_field = ds_orog["PHIS"]
+
+    for _, station in stations.iterrows():
+        lat_s = float(station["Latitude"])
+        lon_s = float(station["Longitude"])
+        alt_s = float(station["Altitude"])
+        name = station["Station_Name"]
+        idx = int(station["idx"])
+
+        # Nearest model grid cell for this station
+        i, j = nearest_grid_index(lat_s, lon_s, lats, lons)
+
+        # PHIS at that grid point (time dimension assumed to exist → take time=0)
+        PHIS_val = PHIS_field.isel(time=0, lat=i, lon=j).item()
+
+        # Interpret PHIS as geopotential (m^2/s^2) or height (m)
+        if PHIS_val > 2e4:  # heuristic threshold; adjust if needed
+            z_surf_model = (PHIS_val * units("m^2/s^2") / g).to("meter").magnitude
+        else:
+            z_surf_model = PHIS_val
+
+        # Extract vertical profiles at that grid cell
+        T_prof = ds_T["T"].isel(time=0, lat=i, lon=j).values  # (lev,)
+        p_prof = ds_PL["PL"].isel(time=0, lat=i, lon=j).values  # (lev,)
+
+        try:
+            level_idx, p_level_hPa, z_level_m = metpy_find_level_index(
+                p_prof_Pa=p_prof,
+                T_prof_K=T_prof,
+                station_alt_m=alt_s,
+                z_surf_model=z_surf_model,
+            )
+
+            print(
+                f"Station {name} (idx={idx}, alt={alt_s:.1f} m): "
+                f"nearest level={level_idx}, p={p_level_hPa:.1f} hPa, z={z_level_m:.1f} m"
+            )
+        except Exception as e:
+            print(
+                f"Station {name} (idx={idx}): error computing level -> {e}"
+            )

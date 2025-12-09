@@ -11,7 +11,7 @@ from metpy.units import units
 # main.py
 #%%
 from vertical_indexing import metpy_find_level_index
-from stations_utils import load_stations, select_station
+from stations_utils import load_stations, select_station, all_stations
 from horizontal_indexing import nearest_grid_index
 from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file
 #%%
@@ -129,6 +129,10 @@ def main():
     print("Nearest model level:", idx_level)
     print("Pressure (hPa):", p_level_hPa)
     print("Height (m):", z_level_m)
+
+    # --- NEW: compute and print levels for *all* stations ---
+    #all_stations(ds_species, ds_T, ds_PL, ds_orog)
+#%%
 
 if __name__ == "__main__":
     main()
