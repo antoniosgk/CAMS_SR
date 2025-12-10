@@ -29,28 +29,30 @@ lat_s
 """
 #%%
 def main():
-    idx=2
-    name=None 
-    cell_nums = 8
+    idx=1409 #index of station of the stations_file
+    name=None #name of the station
+    cell_nums = 14 #numb of cells that will plotted n**2
+    d_zoom=1.0
+    #-----------
     stations = load_stations(stations_path)
     station = select_station(stations, idx)
-    lat_s = float(station["Latitude"])
-    lon_s = float(station["Longitude"])
-    alt_s = float(station["Altitude"])
-    name=station["Station_Name"]
-    ds_species=xr.open_dataset(species_file)
-    ds_T = xr.open_dataset(T_file)
-    ds_PL = xr.open_dataset(pl_file)
-    ds_orog = xr.open_dataset(orog_file) 
+    lat_s = float(station["Latitude"]) #latitude of the station
+    lon_s = float(station["Longitude"]) #longitude of the station
+    alt_s = float(station["Altitude"]) #altitude of the station
+    name=station["Station_Name"] #name of the station
+    ds_species=xr.open_dataset(species_file) #nc file with species for specific t
+    ds_T = xr.open_dataset(T_file) #nc file with temperature for the same t
+    ds_PL = xr.open_dataset(pl_file) #nc file with pressure levels for the same t
+    ds_orog = xr.open_dataset(orog_file) #nc file with orography
     print(f"\nSelected station: {name} (lat={lat_s}, lon={lon_s}, alt={alt_s} m)")
 
     #print("T dims:", ds_T["T"].dims)
     #print("PL dims:", ds_PL["PL"].dims)
 
-    lats = ds_species['lat'].values
-    lons = ds_species['lon'].values
+    lats = ds_species['lat'].values #latitudes of the model
+    lons = ds_species['lon'].values #longitudes of the model
 
-    i,j= nearest_grid_index(lat_s,lon_s,lats,lons)
+    i,j= nearest_grid_index(lat_s,lon_s,lats,lons) #func that calculates the index the station falls into horizontally
     print(f"\n The station falls into the grid cell with lat index= {i},lon index= {j}")
     if np.ndim(lats) == 1:
         Ny = lats.shape[0]
@@ -58,12 +60,12 @@ def main():
     else:
         Ny, Nx = lats.shape
 
-    i1, i2 = max(0, i-cell_nums), min(Ny-1, i+cell_nums)
-    j1, j2 = max(0, j-cell_nums), min(Nx-1, j+cell_nums)
+    i1, i2 = max(0, i-cell_nums), min(Ny-1, i+cell_nums) #subsets of lats (for plotting)
+    j1, j2 = max(0, j-cell_nums), min(Nx-1, j+cell_nums) #subset of lons (for plotting)
 
     print(f"\nLoading domain subset: i={i1}:{i2}, j={j1}:{j2} for plotting")
     
-    ds_big = ds_species
+    ds_big = ds_species #a copy of ds_species,maybe not needed,to reevalutate
 
     # Coordinates
     lats_big = ds_big['lat'].values
@@ -98,27 +100,26 @@ def main():
     jj = j - j1
 
     # ---- Orography: PHIS / SGH diagnostics and surface height ----
-    PHIS_field = ds_orog["PHIS"]
-    SGH_field = ds_orog["SGH"]
+    PHIS_field = ds_orog["PHIS"] #surface geopotential height
+    SGH_field = ds_orog["SGH"]  #isotropic stdv of GWD topography
 
     #print("PHIS dims:", PHIS_field.dims)
     #print("SGH dims:", SGH_field.dims)
 
     # Take PHIS / SGH at the same i, j as the station grid cell
-    PHIS_val = PHIS_field.isel(lat=i, lon=j).item()
-    SGH_val = SGH_field.isel(lat=i, lon=j).item()
+    PHIS_val = PHIS_field.isel(lat=i, lon=j).item() #Surf Geopotential height of the gridcell
+    SGH_val = SGH_field.isel(lat=i, lon=j).item()  #isotropic stdv of GWD of the gridcell
 
     # Basic range checks (global)
-    #print("PHIS range (min, max):", float(PHIS_field.min()), float(PHIS_field.max()))
-    #print("SGH range (min, max):", float(SGH_field.min()), float(SGH_field.max()))
-    print(f"PHIS at station grid cell (i={i}, j={j}):", PHIS_val)
-    print(f"SGH at station grid cell (i={i}, j={j}):", SGH_val)
-
+    #print(f"Surface Geopotential range (min, max):, {float(PHIS_field.min()).1f}, {float(PHIS_field.max()).1f")
+    #print(f"SGH range (min, max):", float(SGH_field.min()), float(SGH_field.max()))
+    print(f"Surface Geopotential at station grid cell (i={i}, j={j}):, {PHIS_val:.1f} m2/s2")
+    print(f"SGH at station grid cell (i={i}, j={j}): , {SGH_val:.1f} m")
     # --- Heuristic: decide if PHIS is geopotential (m^2/s^2) or already height (m)
+    #It is already geopotential (units m2/s2)
     # If PHIS is very large (order 1e5 or higher), assume geopotential and divide by g.
-    # Otherwise, treat as meters. Adjust this logic for your dataset if needed.
-    if PHIS_val > 2e4:  # ~ g * 2000 m
-        z_surf_model = (PHIS_val * units('m^2/s^2') / g).to('meter').magnitude
+    if PHIS_val > 2:  # ~ g * 2000 m #2e4
+        z_surf_model = (PHIS_val * units('m^2/s^2') / g).to('meter').magnitude #from geopotential to geop.height
         print("Interpreting PHIS as geopotential (m^2/s^2).")
     else:
         z_surf_model = PHIS_val
@@ -126,8 +127,8 @@ def main():
 
     print(f"Model surface height at station grid cell: {z_surf_model:.1f} m")
     # Extract local profiles
-    T_prof = ds_T["T"].values[0, :, i, j]
-    p_prof = ds_PL["PL"].values[0, :, i, j]  # Pa
+    T_prof = ds_T["T"].values[0, :, i, j] #T profile for the specific gridcell
+    p_prof = ds_PL["PL"].values[0, :, i, j]  # Pressure profile for the specific gridcell
     #T_prof = ds_T["T"].isel(time=0, lat=i, lon=j).values   #see if it is better this
     #p_prof = ds_PL["PL"].isel(time=0, lat=i, lon=j).values #or the above
     #  MetPy-based vertical level selection ---
@@ -138,13 +139,13 @@ def main():
         z_surf_model=z_surf_model
     )
 
-    print("Nearest model level:", idx_level)
-    print("Pressure (hPa):", p_level_hPa)
-    print("Height (m):", z_level_m)
+    print(f"Nearest model level:", idx_level)
+    print(f"Pressure (hPa):, {p_level_hPa:.2f}")
+    print(f"Height (m):, {z_level_m:.2f}")
     data_arr = ds_small[var_name].isel({'time': 0,
                                    'lev': idx_level}).values
     
-    fig, ax, im = plot_variable_on_map(
+    '''fig1, ax1, im1 = plot_variable_on_map(
     lats_small,
     lons_small,
     data_arr,
@@ -152,16 +153,27 @@ def main():
     lat_s,
     units=units,
     species_name=species,
-                         )
-    plt.show()
+    d=d_zoom
+    )'''
+    
+    fig2, ax2, im2 = plot_variable_on_map(
+    lats_small,
+    lons_small,
+    data_arr,
+    lon_s,
+    lat_s,
+    units=units,
+    species_name=species,
+    d=d_zoom
+    )
 
     plot_rectangles(
-    ax,
+    ax2,
     lats_small,
     lons_small,
     ii,
     jj,
-    im,
+    im2,
     units=units,
     species_name=species,
     )

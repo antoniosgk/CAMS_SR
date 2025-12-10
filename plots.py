@@ -19,7 +19,7 @@ def plot_variable_on_map(
     species_name="var",
     proj=None,
     ax=None,
-    d=0.8,
+    d=5,
 ):
     """
     Plot a 2D variable (data_arr) on a map around a station.
@@ -169,7 +169,7 @@ def plot_rectangles(
     # Colorbar and title
     plt.colorbar(im, ax=ax, pad=0.02, label=units)
     ax.set_title(f"{species_name} around station")
-
+    return ax,im
 
 
 def _sort_by_pressure(p_hPa, *arrays):

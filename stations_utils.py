@@ -76,7 +76,7 @@ def all_stations():
 
     # Ask user how many stations to print
 
-    t = 10  # or set this from outside / function argument
+    t = 1  # or set this from outside / function argument
 
 # t is an integer here; just clamp it to [1, total_stations]
     n_to_print = max(1, min(int(t), total_stations))
@@ -121,11 +121,9 @@ def all_stations():
     # PHIS at that grid point (assume time dimension exists → time=0)
         PHIS_val = PHIS_field.isel(time=0, lat=i, lon=j).item()
 
-    # Interpret PHIS as geopotential (m^2/s^2) or height (m)
-        if PHIS_val > 2e4:  # heuristic threshold; adjust if needed
-          z_surf_model = (PHIS_val * units("m^2/s^2") / g).to("meter").magnitude
-        else:
-          z_surf_model = PHIS_val
+
+        z_surf_model = (PHIS_val * units("m^2/s^2") / g).to("meter").magnitude
+        
 
     # Vertical profiles at that grid cell
         T_prof = ds_T["T"].isel(time=0, lat=i, lon=j).values  # (lev,)
@@ -148,9 +146,9 @@ def all_stations():
           non71_count += 1
 
     # Print only up to n_to_print stations
-        if printed < n_to_print:
+        '''if printed < n_to_print:
           print(f"{name}\t{alt_s:.1f}\t{level_idx}")
-          printed += 1
+          printed += 1'''
 
 
 

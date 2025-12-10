@@ -98,7 +98,7 @@ def metpy_find_level_index(p_prof_Pa, T_prof_K, station_alt_m,
 
     # Basic vertical diagnostics
     p_hPa_prof = p_prof_Pa / 100.0
-    print("DEBUG: p_prof range (hPa):", float(p_hPa_prof.min()), "→", float(p_hPa_prof.max()))
+    print(f"DEBUG: p_prof range (hPa):, {float(p_hPa_prof.min()):.1f}, →, {float(p_hPa_prof.max()):.1f}")
     print("DEBUG: z_prof range (m):", float(z_prof.min()), "→", float(z_prof.max()))
     print("DEBUG: few levels near surface (by max pressure index):")
 

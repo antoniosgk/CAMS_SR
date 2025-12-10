@@ -84,5 +84,5 @@ def compute_sector_tables(ii, jj, lats_small, lons_small, data_arr, var_name):
     df_S1 = sector_table(S1, lats_small, lons_small, data_arr, var_name)
     df_S2 = sector_table(S2, lats_small, lons_small, data_arr, var_name)
     df_S3 = sector_table(S3, lats_small, lons_small, data_arr, var_name)
-
+    print(df_S1)
     return df_S1, df_S2, df_S3, S1, S2, S3
