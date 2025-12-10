@@ -5,6 +5,7 @@ import pathlib
 import numpy as np
 import pandas as pd
 import xarray as xr
+import matplotlib.pyplot as plt
 from metpy.constants import g 
 from metpy.units import units
 
@@ -14,6 +15,18 @@ from vertical_indexing import metpy_find_level_index
 from stations_utils import load_stations, select_station, all_stations
 from horizontal_indexing import nearest_grid_index
 from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file
+from calculation import compute_sector_masks, sector_table
+from plots import (plot_variable_on_map, plot_rectangles,plot_profile_P_T,
+                   plot_profile_P_z, plot_profile_T_z,)
+"""
+This comment section includes all the variables,the functions,their names
+and their physical interpretation
+idx:index of the station of the stations file
+name:name of the station of the stations file
+cell_nums:number of cells around the central grid cell(the one the station falls into)
+that will be plotted
+lat_s
+"""
 #%%
 def main():
     idx=2
@@ -31,8 +44,8 @@ def main():
     ds_orog = xr.open_dataset(orog_file) 
     print(f"\nSelected station: {name} (lat={lat_s}, lon={lon_s}, alt={alt_s} m)")
 
-    print("T dims:", ds_T["T"].dims)
-    print("PL dims:", ds_PL["PL"].dims)
+    #print("T dims:", ds_T["T"].dims)
+    #print("PL dims:", ds_PL["PL"].dims)
 
     lats = ds_species['lat'].values
     lons = ds_species['lon'].values
@@ -75,10 +88,9 @@ def main():
 
 # variable extraction
     var_name = species
-    #data_arr = ds_small[var_name].isel({'time': 0,
-                                  #  'lev': vertical_idx}).values
+    
 
-# free memory
+ # free memory
     #ds_big.close()
     #del ds_big
 # local (station) indices in the small box
@@ -89,16 +101,16 @@ def main():
     PHIS_field = ds_orog["PHIS"]
     SGH_field = ds_orog["SGH"]
 
-    print("PHIS dims:", PHIS_field.dims)
-    print("SGH dims:", SGH_field.dims)
+    #print("PHIS dims:", PHIS_field.dims)
+    #print("SGH dims:", SGH_field.dims)
 
     # Take PHIS / SGH at the same i, j as the station grid cell
     PHIS_val = PHIS_field.isel(lat=i, lon=j).item()
     SGH_val = SGH_field.isel(lat=i, lon=j).item()
 
     # Basic range checks (global)
-    print("PHIS range (min, max):", float(PHIS_field.min()), float(PHIS_field.max()))
-    print("SGH range (min, max):", float(SGH_field.min()), float(SGH_field.max()))
+    #print("PHIS range (min, max):", float(PHIS_field.min()), float(PHIS_field.max()))
+    #print("SGH range (min, max):", float(SGH_field.min()), float(SGH_field.max()))
     print(f"PHIS at station grid cell (i={i}, j={j}):", PHIS_val)
     print(f"SGH at station grid cell (i={i}, j={j}):", SGH_val)
 
@@ -129,8 +141,44 @@ def main():
     print("Nearest model level:", idx_level)
     print("Pressure (hPa):", p_level_hPa)
     print("Height (m):", z_level_m)
+    data_arr = ds_small[var_name].isel({'time': 0,
+                                   'lev': idx_level}).values
+    
+    fig, ax, im = plot_variable_on_map(
+    lats_small,
+    lons_small,
+    data_arr,
+    lon_s,
+    lat_s,
+    units=units,
+    species_name=species,
+                         )
+    plt.show()
 
-    # --- NEW: compute and print levels for *all* stations ---
+    plot_rectangles(
+    ax,
+    lats_small,
+    lons_small,
+    ii,
+    jj,
+    im,
+    units=units,
+    species_name=species,
+    )
+
+    plt.show()
+    fig_PT, ax_PT = plot_profile_P_T(p_prof, T_prof)
+
+# P–z
+    #fig_Pz, ax_Pz = plot_profile_P_z(p_prof, z_prof, z_units="km")
+
+# T–z
+    #fig_Tz, ax_Tz = plot_profile_T_z(T_prof, z_prof, z_units="km")
+
+
+
+
+    # --- compute and print levels for *all* stations ---
     #all_stations()
 #%%
 
