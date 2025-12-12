@@ -19,6 +19,7 @@ from calculation import compute_sector_masks, sector_table
 from plots import (plot_variable_on_map, plot_rectangles,plot_profile_P_T,
                    plot_profile_P_z, plot_profile_T_z,)
 """
+/
 This comment section includes all the variables,the functions,their names
 and their physical interpretation
 idx:index of the station of the stations file
@@ -29,10 +30,10 @@ lat_s
 """
 #%%
 def main():
-    idx=1409 #index of station of the stations_file
+    idx=5 #index of station of the stations_file
     name=None #name of the station
-    cell_nums = 14 #numb of cells that will plotted n**2
-    d_zoom=1.0
+    cell_nums = 4 #numb of cells that will plotted n**2
+    d_zoom=0.4 #zoom of plots
     #-----------
     stations = load_stations(stations_path)
     station = select_station(stations, idx)
@@ -44,6 +45,7 @@ def main():
     ds_T = xr.open_dataset(T_file) #nc file with temperature for the same t
     ds_PL = xr.open_dataset(pl_file) #nc file with pressure levels for the same t
     ds_orog = xr.open_dataset(orog_file) #nc file with orography
+    #ds_RH=xr.open_dataset(RH_file)
     print(f"\nSelected station: {name} (lat={lat_s}, lon={lon_s}, alt={alt_s} m)")
 
     #print("T dims:", ds_T["T"].dims)
@@ -131,7 +133,7 @@ def main():
     p_prof = ds_PL["PL"].values[0, :, i, j]  # Pressure profile for the specific gridcell
     #T_prof = ds_T["T"].isel(time=0, lat=i, lon=j).values   #see if it is better this
     #p_prof = ds_PL["PL"].isel(time=0, lat=i, lon=j).values #or the above
-    #  MetPy-based vertical level selection ---
+    #  MetPy-based vertical level selection --- metpy_find_level_index
     idx_level, p_level_hPa, z_level_m = metpy_find_level_index(
         p_prof_Pa=p_prof,
         T_prof_K=T_prof,
@@ -192,7 +194,6 @@ def main():
 
     # --- compute and print levels for *all* stations ---
     #all_stations()
-#%%
 
 if __name__ == "__main__":
     main()

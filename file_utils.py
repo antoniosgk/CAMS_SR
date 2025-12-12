@@ -13,13 +13,16 @@ date = "20050524"       # YYYYMMDD
 time = "0200"           # HHMM
 
 # Path construction for species file 
-species_file = pathlib.Path(f"{base_path}/{species}/{product}_{date}_{time}.nc4")
+species_file = pathlib.Path(f"{base_path}/{species}/{product}_{species}_{date}_{time}.nc4")
 
 # Path construction for Pressure Level file 
-pl_file = pathlib.Path(f"{base_path}/PL/{product}_{date}_{time}.nc4")
+pl_file = pathlib.Path(f"{base_path}/PL/{product}_PL_{date}_{time}.nc4")
 
 # Path construction for Temperature file
-T_file = pathlib.Path(f"{base_path}/T/{product}_{date}_{time}.nc4")
+T_file = pathlib.Path(f"{base_path}/T/{product}_T_{date}_{time}.nc4")
 
 #Orography file
 orog_file="/mnt/store01/agkiokas/CAMS/inst/const/file.nc"
+
+#Relative Humidity file
+RH_file=pathlib.Path(f"{base_path}/RH/{product}_RH_{date}_{time}.nc4")

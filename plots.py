@@ -52,7 +52,7 @@ def plot_variable_on_map(
     ax.set_xticks(xticks, crs=proj)
     ax.set_yticks(yticks, crs=proj)
     ax.set_xticklabels(xticks, rotation=45, ha="right")
-    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter("{x:.3f}"))
+    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter("{x:.1f}"))
 
     # Lon/lat grids
     if lats_small.ndim == 1 and lons_small.ndim == 1:
