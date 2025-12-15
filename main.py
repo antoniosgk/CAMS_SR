@@ -7,7 +7,7 @@ import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
 from metpy.constants import g 
-from metpy.units import units
+from metpy.units import units as mp_units
 
 # main.py
 #%%
@@ -16,8 +16,13 @@ from stations_utils import load_stations, select_station, all_stations
 from horizontal_indexing import nearest_grid_index
 from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file
 from calculation import compute_sector_masks, sector_table
-from plots import (plot_variable_on_map, plot_rectangles,plot_profile_P_T,
-                   plot_profile_P_z, plot_profile_T_z,)
+from plots import (plot_variable_on_map,plot_rectangles,
+    plot_profile_P_T,
+    plot_profile_T_Z,
+    plot_profile_T_logP,
+    plot_profile_species_logP,
+    plot_profile_species_Z,
+)
 """
 /
 This comment section includes all the variables,the functions,their names
@@ -111,7 +116,8 @@ def main():
     # Take PHIS / SGH at the same i, j as the station grid cell
     PHIS_val = PHIS_field.isel(lat=i, lon=j).item() #Surf Geopotential height of the gridcell
     SGH_val = SGH_field.isel(lat=i, lon=j).item()  #isotropic stdv of GWD of the gridcell
-
+    print(ds_PL.dims)
+    print(ds_T.dims)
     # Basic range checks (global)
     #print(f"Surface Geopotential range (min, max):, {float(PHIS_field.min()).1f}, {float(PHIS_field.max()).1f")
     #print(f"SGH range (min, max):", float(SGH_field.min()), float(SGH_field.max()))
@@ -121,7 +127,7 @@ def main():
     #It is already geopotential (units m2/s2)
     # If PHIS is very large (order 1e5 or higher), assume geopotential and divide by g.
     if PHIS_val > 2:  # ~ g * 2000 m #2e4
-        z_surf_model = (PHIS_val * units('m^2/s^2') / g).to('meter').magnitude #from geopotential to geop.height
+        z_surf_model = (PHIS_val * mp_units('m^2/s^2') / g).to('meter').magnitude #from geopotential to geop.height
         print("Interpreting PHIS as geopotential (m^2/s^2).")
     else:
         z_surf_model = PHIS_val
@@ -131,6 +137,7 @@ def main():
     # Extract local profiles
     T_prof = ds_T["T"].values[0, :, i, j] #T profile for the specific gridcell
     p_prof = ds_PL["PL"].values[0, :, i, j]  # Pressure profile for the specific gridcell
+    species_prof= ds_species['O3'].values[0,:,i,j]
     #T_prof = ds_T["T"].isel(time=0, lat=i, lon=j).values   #see if it is better this
     #p_prof = ds_PL["PL"].isel(time=0, lat=i, lon=j).values #or the above
     #  MetPy-based vertical level selection --- metpy_find_level_index
@@ -140,14 +147,53 @@ def main():
         station_alt_m=alt_s,
         z_surf_model=z_surf_model
     )
-
+    
     print(f"Nearest model level:", idx_level)
     print(f"Pressure (hPa):, {p_level_hPa:.2f}")
     print(f"Height (m):, {z_level_m:.2f}")
+    '''
+    # T_box, P_box: shape (lev, Ny_box, Nx_box)
+    T_box = ds_T["T"].values[0, :, i1:i2+1, j1:j2+1]
+    P_box = ds_PL["PL"].values[0, :, i1:i2+1, j1:j2+1]
+
+    # Flatten horizontal dims to get shape (lev, ncol)
+    nlev, Ny_box, Nx_box = T_box.shape
+    ncol = Ny_box * Nx_box
+
+    T_flat = T_box.reshape(nlev, ncol)
+    P_flat = P_box.reshape(nlev, ncol)
+   
+    # z_surf_model_flat: per-column surface heights ASL if you computed them
+    # (If you only have the station's z_surf_model, you can pass a scalar.)
+    z_surf_flat = z_surf_model  # scalar → same for all columns, or 1D (ncol,) if you compute per cell
+
+    idx_levels, p_levels_hPa, z_levels_m = metpy_find_level_index(
+       p_prof_Pa=P_flat,
+       T_prof_K=T_flat,
+       station_alt_m=alt_s,
+       z_surf_model=z_surf_flat,
+    )
+
+    # idx_levels, p_levels_hPa, z_levels_m are 1D arrays of length ncol
+    # you can reshape back to (Ny_box, Nx_box) if needed:
+    idx_levels_2d = idx_levels.reshape(Ny_box, Nx_box)
+    p_levels_hPa_2d = p_levels_hPa.reshape(Ny_box, Nx_box)
+    z_levels_m_2d = z_levels_m.reshape(Ny_box, Nx_box)
+    '''
+
+    data_var = ds_small[species]          # e.g. species = "O3"
+    units = data_var.attrs.get("units", "")
+
+    # choose time index
+    tidx = 0
+    time_val = data_var["time"].values[tidx]
+    # quick, generic string:
+    time_str = str(time_val)
     data_arr = ds_small[var_name].isel({'time': 0,
                                    'lev': idx_level}).values
     
-    '''fig1, ax1, im1 = plot_variable_on_map(
+    
+    fig1, ax1, im1 = plot_variable_on_map(
     lats_small,
     lons_small,
     data_arr,
@@ -155,8 +201,9 @@ def main():
     lat_s,
     units=units,
     species_name=species,
-    d=d_zoom
-    )'''
+    d=d_zoom,
+    time_str=time_str
+    )
     
     fig2, ax2, im2 = plot_variable_on_map(
     lats_small,
@@ -166,7 +213,8 @@ def main():
     lat_s,
     units=units,
     species_name=species,
-    d=d_zoom
+    d=d_zoom,
+    time_str=time_str
     )
 
     plot_rectangles(
@@ -178,22 +226,43 @@ def main():
     im2,
     units=units,
     species_name=species,
+    time_str=time_str
     )
 
+    # P–T
+    fig_PT, ax_PT = plot_profile_P_T(p_prof, T_prof, idx_level, time_str=time_str)
+
+    # T–Z
+    fig_TZ, ax_TZ = plot_profile_T_Z(T_prof, z_surf_model, idx_level,
+                                 time_str=time_str, z_units="km")
+
+    # T–logP
+    fig_TlogP, ax_TlogP = plot_profile_T_logP(p_prof, T_prof, idx_level,
+                                          time_str=time_str)
+
+# species–logP
+    fig_SlogP, ax_SlogP = plot_profile_species_logP(
+     p_prof,
+     species_prof,
+     idx_level,
+     species_name=species,
+     species_units=units,
+     time_str=time_str,
+    )
+
+# species–Z
+    fig_SZ, ax_SZ = plot_profile_species_Z(
+    z_surf_model,
+    species_prof,
+    idx_level,
+    species_name=species,
+    species_units=units,
+    time_str=time_str,
+    z_units="km",
+)
+
     plt.show()
-    fig_PT, ax_PT = plot_profile_P_T(p_prof, T_prof)
 
-# P–z
-    #fig_Pz, ax_Pz = plot_profile_P_z(p_prof, z_prof, z_units="km")
-
-# T–z
-    #fig_Tz, ax_Tz = plot_profile_T_z(T_prof, z_prof, z_units="km")
-
-
-
-
-    # --- compute and print levels for *all* stations ---
-    #all_stations()
 
 if __name__ == "__main__":
     main()

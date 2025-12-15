@@ -20,6 +20,7 @@ def plot_variable_on_map(
     proj=None,
     ax=None,
     d=5,
+    time_str=None
 ):
     """
     Plot a 2D variable (data_arr) on a map around a station.
@@ -32,6 +33,7 @@ def plot_variable_on_map(
     proj                  : cartopy CRS (defaults to PlateCarree)
     ax                    : existing GeoAxes (optional)
     d                     : half-width of domain in degrees around station
+    time_str              : optional time string for time
     """
     if proj is None:
         proj = ccrs.PlateCarree()
@@ -46,6 +48,7 @@ def plot_variable_on_map(
     lat_min, lat_max = lat_s - d, lat_s + d
     ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=proj)
 
+    ax.stock_img() # background topography-like
     # Ticks
     xticks = np.arange(lon_min, lon_max + 0.1, 0.5)
     yticks = np.arange(lat_min, lat_max + 0.1, 0.5)
@@ -92,6 +95,19 @@ def plot_variable_on_map(
     ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=0)
     ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
 
+    if units:
+        base_title = f"{species_name} ({units})"
+    else:
+        base_title = species_name
+
+    if time_str is not None:
+        title = f"{base_title} at {time_str}.6f"
+    else:
+        title = base_title
+
+    ax.set_title(title)
+
+
     return fig, ax, im
 
 
@@ -104,6 +120,7 @@ def plot_rectangles(
     im,
     units="",
     species_name="var",
+    time_str= None
 ):
     """
     Plot the 3 sector rectangles (S1, S2, S3) around the central grid cell (ii, jj)
@@ -168,122 +185,128 @@ def plot_rectangles(
 
     # Colorbar and title
     plt.colorbar(im, ax=ax, pad=0.02, label=units)
-    ax.set_title(f"{species_name} around station")
+    # Title consistent with map
+    if units:
+        base_title = f"{species_name} ({units})"
+    else:
+        base_title = species_name
+
+    if time_str is not None:
+        title = f"{base_title} at {time_str}"
+    else:
+        title = base_title
+
+    ax.set_title(f"{title} around station")
+    
     return ax,im
 
 
-def _sort_by_pressure(p_hPa, *arrays):
+def _sort_by_pressure_with_index(p_hPa, idx_level, *arrays):
     """
-    Helper: sort profiles from surface (max p) to top (min p).
-    Returns sorted p_hPa and all input arrays in the same order.
+    Sort profiles from surface (max p) to top (min p),
+    and return the new index of the selected level.
+
+    Returns
+    -------
+    p_sorted, arrays_sorted..., idx_sorted
     """
     p_hPa = np.asarray(p_hPa)
     order = np.argsort(p_hPa)[::-1]  # descending: surface → top
-    sorted_arrays = [p_hPa[order]]
+
+    p_sorted = p_hPa[order]
+    sorted_arrays = []
     for arr in arrays:
         if arr is None:
             sorted_arrays.append(None)
         else:
             arr = np.asarray(arr)
             sorted_arrays.append(arr[order])
-    return sorted_arrays
 
+    # find where the original idx_level moved to
+    idx_sorted = int(np.where(order == idx_level)[0][0])
 
-def plot_profile_P_T(p_prof_Pa, T_prof_K, ax=None):
+    return (p_sorted, *sorted_arrays, idx_sorted)
+
+def plot_profile_P_T(p_prof_Pa, T_prof_K, idx_level,
+                     time_str=None, ax=None):
     """
     Plot vertical profile: Pressure (hPa) vs Temperature (°C)
-    for a single grid cell.
+    for a single grid cell, with a red dot at idx_level.
 
+    Parameters
+    ----------
     p_prof_Pa : 1D array, pressure in Pa
-    T_prof_K  : 1D array, temperature in K (same levels as p_prof_Pa)
-    ax        : optional matplotlib Axes. If None, a new figure/axes is created.
+    T_prof_K  : 1D array, temperature in K
+    idx_level : int, selected model level index (0-based)
+    time_str  : optional, string to show in title (e.g. '2025-12-15 00:00 UTC')
+    ax        : optional matplotlib Axes
 
-    Returns (fig, ax).
+    Returns (fig, ax)
     """
     p_hPa = np.asarray(p_prof_Pa) / 100.0
     T_C = np.asarray(T_prof_K) - 273.15
 
-    # Sort from surface (max p) to top (min p)
-    p_hPa, T_C = _sort_by_pressure(p_hPa, T_C)
+    # Sort from surface (max p) to top (min p), track level index
+    p_sorted, T_sorted, idx_sorted = _sort_by_pressure_with_index(
+        p_hPa, idx_level, T_C
+    )
 
     if ax is None:
         fig, ax = plt.subplots()
     else:
         fig = ax.figure
 
-    ax.plot(T_C, p_hPa, marker="o")
+    # main profile
+    ax.plot(T_sorted, p_sorted, "-o")
+
+    # red dot at selected level
+    ax.scatter(T_sorted[idx_sorted], p_sorted[idx_sorted],
+               color="red", zorder=3, label="Selected level")
+
     ax.set_xlabel("Temperature (°C)")
     ax.set_ylabel("Pressure (hPa)")
-    ax.set_title("Vertical profile: P–T")
-    ax.invert_yaxis()  # pressure decreases upward
+    title = "Vertical profile: P–T"
+    if time_str is not None:
+        title += f" at {time_str}"
+    ax.set_title(title)
 
-    ax.grid(True, linestyle="--", alpha=0.5)
-    return fig, ax
-
-
-def plot_profile_P_z(p_prof_Pa, z_prof_m, ax=None, z_units="km"):
-    """
-    Plot vertical profile: Pressure (hPa) vs Height (z).
-
-    p_prof_Pa : 1D array, pressure in Pa
-    z_prof_m  : 1D array, height in meters (ASL) for the same levels
-    ax        : optional matplotlib Axes
-    z_units   : "km" or "m" for x-axis units
-
-    Returns (fig, ax).
-    """
-    p_hPa = np.asarray(p_prof_Pa) / 100.0
-    z_m = np.asarray(z_prof_m)
-
-    # Sort from surface (max p) to top (min p)
-    p_hPa, z_m = _sort_by_pressure(p_hPa, z_m)
-
-    if z_units == "km":
-        z_vals = z_m / 1000.0
-        xlabel = "Height (km)"
-    else:
-        z_vals = z_m
-        xlabel = "Height (m)"
-
-    if ax is None:
-        fig, ax = plt.subplots()
-    else:
-        fig = ax.figure
-
-    ax.plot(z_vals, p_hPa, marker="o")
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel("Pressure (hPa)")
-    ax.set_title("Vertical profile: P–z")
     ax.invert_yaxis()
-
     ax.grid(True, linestyle="--", alpha=0.5)
+    ax.legend(loc="best")
+
     return fig, ax
 
-
-def plot_profile_T_z(T_prof_K, z_prof_m, ax=None, z_units="km"):
+def plot_profile_T_Z(T_prof_K, z_prof_m, idx_level,
+                     time_str=None, z_units="km", ax=None):
     """
-    Plot vertical profile: Temperature (°C) vs Height (z).
+    Plot vertical profile: Temperature (°C) vs Height (Z),
+    with red dot at idx_level.
 
+    Parameters
+    ----------
     T_prof_K  : 1D array, temperature in K
-    z_prof_m  : 1D array, height in meters (ASL) for the same levels
-    ax        : optional matplotlib Axes
-    z_units   : "km" or "m" for y-axis units
+    z_prof_m  : 1D array, height in m (ASL)
+    idx_level : int, selected model level index
+    time_str  : optional, string for title
+    z_units   : 'km' or 'm'
+    ax        : optional Axes
 
-    Returns (fig, ax).
+    Returns (fig, ax)
     """
     T_C = np.asarray(T_prof_K) - 273.15
     z_m = np.asarray(z_prof_m)
 
-    # Sort by height ascending (ground → top)
+    # sort by height ascending (surface → top)
     order = np.argsort(z_m)
-    z_m = z_m[order]
-    T_C = T_C[order]
+    z_sorted = z_m[order]
+    T_sorted = T_C[order]
+    idx_sorted = int(np.where(order == idx_level)[0][0])
 
     if z_units == "km":
-        z_vals = z_m / 1000.0
+        z_vals = z_sorted / 1000.0
         ylabel = "Height (km)"
     else:
-        z_vals = z_m
+        z_vals = z_sorted
         ylabel = "Height (m)"
 
     if ax is None:
@@ -291,10 +314,182 @@ def plot_profile_T_z(T_prof_K, z_prof_m, ax=None, z_units="km"):
     else:
         fig = ax.figure
 
-    ax.plot(T_C, z_vals, marker="o")
+    ax.plot(T_sorted, z_vals, "-o")
+    ax.scatter(T_sorted[idx_sorted], z_vals[idx_sorted],
+               color="red", zorder=3, label="Selected level")
+
     ax.set_xlabel("Temperature (°C)")
     ax.set_ylabel(ylabel)
-    ax.set_title("Vertical profile: T–z")
+    title = "Vertical profile: T–Z"
+    if time_str is not None:
+        title += f" at {time_str}"
+    ax.set_title(title)
 
     ax.grid(True, linestyle="--", alpha=0.5)
+    ax.legend(loc="best")
+
+    return fig, ax
+
+def plot_profile_T_logP(p_prof_Pa, T_prof_K, idx_level,
+                        time_str=None, ax=None):
+    """
+    Plot vertical profile: Temperature (°C) vs log10(P [hPa]),
+    with red dot at idx_level.
+
+    Parameters
+    ----------
+    p_prof_Pa : 1D array, pressure in Pa
+    T_prof_K  : 1D array, temperature in K
+    idx_level : int, selected model level index
+    time_str  : optional, string for title
+    ax        : optional Axes
+
+    Returns (fig, ax)
+    """
+    p_hPa = np.asarray(p_prof_Pa) / 100.0
+    T_C = np.asarray(T_prof_K) - 273.15
+
+    # sort by pressure (surface → top)
+    p_sorted, T_sorted, idx_sorted = _sort_by_pressure_with_index(
+        p_hPa, idx_level, T_C
+    )
+
+    # log10 of pressure
+    logP = np.log10(p_sorted)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.figure
+
+    ax.plot(T_sorted, logP, "-o")
+    ax.scatter(T_sorted[idx_sorted], logP[idx_sorted],
+               color="red", zorder=3, label="Selected level")
+
+    ax.set_xlabel("Temperature (°C)")
+    ax.set_ylabel("log10(Pressure [hPa])")
+    title = "Vertical profile: T–log10(P)"
+    if time_str is not None:
+        title += f" at {time_str}"
+    ax.set_title(title)
+
+    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.legend(loc="best")
+
+    return fig, ax
+
+def plot_profile_species_logP(p_prof_Pa, species_prof, idx_level,
+                              species_name="species", species_units="",
+                              time_str=None, ax=None):
+    """
+    Plot vertical profile: species vs log10(P [hPa]),
+    with red dot at idx_level.
+
+    Parameters
+    ----------
+    p_prof_Pa    : 1D array, pressure in Pa
+    species_prof : 1D array, species values (same levels)
+    idx_level    : int, selected model level index
+    species_name : name of species (for labels)
+    species_units: units of species (for labels)
+    time_str     : optional string for title
+    ax           : optional Axes
+
+    Returns (fig, ax)
+    """
+    p_hPa = np.asarray(p_prof_Pa) / 100.0
+    sp = np.asarray(species_prof)
+
+    p_sorted, sp_sorted, idx_sorted = _sort_by_pressure_with_index(
+        p_hPa, idx_level, sp
+    )
+
+    logP = np.log10(p_sorted)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.figure
+
+    ax.plot(sp_sorted, logP, "-o")
+    ax.scatter(sp_sorted[idx_sorted], logP[idx_sorted],
+               color="red", zorder=3, label="Selected level")
+
+    xlabel = species_name
+    if species_units:
+        xlabel += f" [{species_units}]"
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("log10(Pressure [hPa])")
+
+    title = f"{species_name}–log10(P)"
+    if time_str is not None:
+        title += f" at {time_str}"
+    ax.set_title(title)
+
+    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.legend(loc="best")
+
+    return fig, ax
+
+def plot_profile_species_Z(z_prof_m, species_prof, idx_level,
+                           species_name="species", species_units="",
+                           time_str=None, z_units="km", ax=None):
+    """
+    Plot vertical profile: species vs Height (Z),
+    with red dot at idx_level.
+
+    Parameters
+    ----------
+    z_prof_m     : 1D array, height in m (ASL)
+    species_prof : 1D array, species values
+    idx_level    : int, selected model level index
+    species_name : name of species
+    species_units: units of species
+    time_str     : optional string for title
+    z_units      : 'km' or 'm'
+    ax           : optional Axes
+
+    Returns (fig, ax)
+    """
+    z_m = np.asarray(z_prof_m)
+    sp = np.asarray(species_prof)
+
+    # sort by height ascending
+    order = np.argsort(z_m)
+    z_sorted = z_m[order]
+    sp_sorted = sp[order]
+    idx_sorted = int(np.where(order == idx_level)[0][0])
+
+    if z_units == "km":
+        z_vals = z_sorted / 1000.0
+        ylabel = "Height (km)"
+    else:
+        z_vals = z_sorted
+        ylabel = "Height (m)"
+
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.figure
+
+    ax.plot(sp_sorted, z_vals, "-o")
+    ax.scatter(sp_sorted[idx_sorted], z_vals[idx_sorted],
+               color="red", zorder=3, label="Selected level")
+
+    xlabel = species_name
+    if species_units:
+        xlabel += f" [{species_units}]"
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+
+    title = f"{species_name}–Z"
+    if time_str is not None:
+        title += f" at {time_str}"
+    ax.set_title(title)
+
+    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.legend(loc="best")
+
     return fig, ax
