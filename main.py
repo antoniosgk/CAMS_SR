@@ -231,7 +231,7 @@ def main():
 
     # P–T
     fig_PT, ax_PT = plot_profile_P_T(p_prof, T_prof, idx_level, time_str=time_str)
-
+    plt.show()
     # T–Z
     fig_TZ, ax_TZ = plot_profile_T_Z(T_prof, z_surf_model, idx_level,
                                  time_str=time_str, z_units="km")
