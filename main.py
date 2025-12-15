@@ -11,7 +11,7 @@ from metpy.units import units as mp_units
 
 # main.py
 #%%
-from vertical_indexing import metpy_find_level_index
+from vertical_indexing import metpy_find_level_index,metpy_compute_heights
 from stations_utils import load_stations, select_station, all_stations
 from horizontal_indexing import nearest_grid_index
 from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file
@@ -151,6 +151,12 @@ def main():
     print(f"Nearest model level:", idx_level)
     print(f"Pressure (hPa):, {p_level_hPa:.2f}")
     print(f"Height (m):, {z_level_m:.2f}")
+
+    z_prof = metpy_compute_heights(
+    p_prof_Pa=p_prof,
+    T_prof_K=T_prof,
+    z0=z_surf_model,
+)
     '''
     # T_box, P_box: shape (lev, Ny_box, Nx_box)
     T_box = ds_T["T"].values[0, :, i1:i2+1, j1:j2+1]
@@ -233,7 +239,7 @@ def main():
     fig_PT, ax_PT = plot_profile_P_T(p_prof, T_prof, idx_level, time_str=time_str)
     plt.show()
     # T–Z
-    fig_TZ, ax_TZ = plot_profile_T_Z(T_prof, z_surf_model, idx_level,
+    fig_TZ, ax_TZ = plot_profile_T_Z(T_prof, z_prof, idx_level,
                                  time_str=time_str, z_units="km")
 
     # T–logP
@@ -252,7 +258,7 @@ def main():
 
 # species–Z
     fig_SZ, ax_SZ = plot_profile_species_Z(
-    z_surf_model,
+    z_prof,
     species_prof,
     idx_level,
     species_name=species,
