@@ -6,6 +6,7 @@ from matplotlib.colors import Normalize
 from matplotlib.patches import Rectangle
 import matplotlib.ticker as ticker
 import cartopy.crs as ccrs
+from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 import cartopy.feature as cfeature
 import os
 import re
@@ -65,13 +66,18 @@ def plot_variable_on_map(
     lon_min, lon_max = lon_s - d, lon_s + d
     lat_min, lat_max = lat_s - d, lat_s + d
     ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=proj)
+    #ax.add_feature(cfeature.ShadedRelief(), zorder=0)
 
-    ax.stock_img() # background topography-like
+    # Optional: coastlines/borders on top of relief
+    ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=3)
+    ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=3)
+
+    #ax.stock_img() # background topography-like
     # Ticks
     xticks = np.arange(lon_min, lon_max + 0.1, 0.5)
     yticks = np.arange(lat_min, lat_max + 0.1, 0.5)
-    ax.set_xticks(xticks, crs=proj)
-    ax.set_yticks(yticks, crs=proj)
+    #ax.set_xticks(xticks, crs=proj)
+    #ax.set_yticks(yticks, crs=proj)
     ax.set_xticklabels(xticks, rotation=45, ha="right")
     ax.xaxis.set_major_formatter(ticker.StrMethodFormatter("{x:.1f}"))
 
@@ -95,7 +101,7 @@ def plot_variable_on_map(
         cmap="turbo",
         shading="auto",
         norm=norm,
-        transform=ccrs.PlateCarree(),
+        transform=ccrs.PlateCarree(),alpha=0.78,zorder=2
     )
 
     # Station marker
@@ -112,6 +118,24 @@ def plot_variable_on_map(
     ax.add_feature(cfeature.OCEAN, facecolor="white", zorder=0)
     ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=0)
     ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
+    gl = ax.gridlines(
+        crs=ccrs.PlateCarree(),
+        draw_labels=True,
+        linewidth=0.5,
+        alpha=0.01,
+        linestyle="--",
+        zorder=5
+    )
+    gl.top_labels = False
+    gl.right_labels = False
+
+    # DMS-style labels (degrees/minutes/seconds). This gives the ° and ' style.
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
+
+    # Control tick spacing (example: every 0.2 degrees)
+    gl.xlocator = ticker.MultipleLocator(0.2)
+    gl.ylocator = ticker.MultipleLocator(0.2)
 
     if units:
         base_title = f"{species_name} ({units})"

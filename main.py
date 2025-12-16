@@ -14,7 +14,7 @@ from metpy.units import units as mp_units
 from vertical_indexing import metpy_find_level_index,metpy_compute_heights
 from stations_utils import load_stations, select_station, all_stations
 from horizontal_indexing import nearest_grid_index
-from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file
+from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file,RH_file
 from calculation import compute_sector_masks, sector_table
 from plots import (plot_variable_on_map,plot_rectangles,
     plot_profile_P_T,
@@ -50,7 +50,7 @@ def main():
     ds_T = xr.open_dataset(T_file) #nc file with temperature for the same t
     ds_PL = xr.open_dataset(pl_file) #nc file with pressure levels for the same t
     ds_orog = xr.open_dataset(orog_file) #nc file with orography
-    #ds_RH=xr.open_dataset(RH_file)
+    ds_RH=xr.open_dataset(RH_file)
     print(f"\nSelected station: {name} (lat={lat_s}, lon={lon_s}, alt={alt_s} m)")
 
     #print("T dims:", ds_T["T"].dims)
@@ -116,8 +116,7 @@ def main():
     # Take PHIS / SGH at the same i, j as the station grid cell
     PHIS_val = PHIS_field.isel(lat=i, lon=j).item() #Surf Geopotential height of the gridcell
     SGH_val = SGH_field.isel(lat=i, lon=j).item()  #isotropic stdv of GWD of the gridcell
-    print(ds_PL.dims)
-    print(ds_T.dims)
+    
     # Basic range checks (global)
     #print(f"Surface Geopotential range (min, max):, {float(PHIS_field.min()).1f}, {float(PHIS_field.max()).1f")
     #print(f"SGH range (min, max):", float(SGH_field.min()), float(SGH_field.max()))
@@ -137,13 +136,15 @@ def main():
     # Extract local profiles
     T_prof = ds_T["T"].values[0, :, i, j] #T profile for the specific gridcell
     p_prof = ds_PL["PL"].values[0, :, i, j]  # Pressure profile for the specific gridcell
-    species_prof= ds_species['O3'].values[0,:,i,j]
+    species_prof= ds_species['O3'].values[0,:,i,j] #here i must put species or var!!!
+    RH_prof = ds_RH['RH'].values[0,:,i,j]
     #T_prof = ds_T["T"].isel(time=0, lat=i, lon=j).values   #see if it is better this
     #p_prof = ds_PL["PL"].isel(time=0, lat=i, lon=j).values #or the above
     #  MetPy-based vertical level selection --- metpy_find_level_index
     idx_level, p_level_hPa, z_level_m = metpy_find_level_index(
         p_prof_Pa=p_prof,
         T_prof_K=T_prof,
+        RH=RH_prof,
         station_alt_m=alt_s,
         z_surf_model=z_surf_model
     )
@@ -155,37 +156,48 @@ def main():
     z_prof = metpy_compute_heights(
     p_prof_Pa=p_prof,
     T_prof_K=T_prof,
+    RH=RH_prof,
     z0=z_surf_model,
 )
-    '''
-    # T_box, P_box: shape (lev, Ny_box, Nx_box)
-    T_box = ds_T["T"].values[0, :, i1:i2+1, j1:j2+1]
-    P_box = ds_PL["PL"].values[0, :, i1:i2+1, j1:j2+1]
+    
 
-    # Flatten horizontal dims to get shape (lev, ncol)
+    # T_box, P_box, RH_box: shape (lev, Ny_box, Nx_box)
+    T_box = ds_T["T"].isel(time=0, lat=slice(i1, i2+1), lon=slice(j1, j2+1)).values
+    P_box = ds_PL["PL"].isel(time=0, lat=slice(i1, i2+1), lon=slice(j1, j2+1)).values
+    RH_box=ds_RH["RH"].isel(time=0, lat=slice(i1, i2+1), lon=slice(j1, j2+1)).values
     nlev, Ny_box, Nx_box = T_box.shape
     ncol = Ny_box * Nx_box
 
     T_flat = T_box.reshape(nlev, ncol)
     P_flat = P_box.reshape(nlev, ncol)
-   
-    # z_surf_model_flat: per-column surface heights ASL if you computed them
-    # (If you only have the station's z_surf_model, you can pass a scalar.)
-    z_surf_flat = z_surf_model  # scalar → same for all columns, or 1D (ncol,) if you compute per cell
+    RH_flat= RH_box.reshape(nlev,ncol)
+# --- PHIS for the same box (Ny_box, Nx_box) ---
+    PHIS_box = ds_orog["PHIS"].isel(time=0, lat=slice(i1, i2+1), lon=slice(j1, j2+1)).values
 
+# Convert PHIS -> surface height per cell (ASL), then flatten
+# (Use your preferred heuristic; below matches your earlier intention.)
+    if np.nanmax(PHIS_box) > 2:
+        z_surf_box = (PHIS_box * mp_units("m^2/s^2") / g).to("meter").magnitude
+    else:
+        z_surf_box = PHIS_box
+
+    z_surf_flat = z_surf_box.reshape(ncol)   # shape (ncol,)
+
+# Now run vertical indexing for every column
     idx_levels, p_levels_hPa, z_levels_m = metpy_find_level_index(
-       p_prof_Pa=P_flat,
-       T_prof_K=T_flat,
-       station_alt_m=alt_s,
-       z_surf_model=z_surf_flat,
-    )
+        p_prof_Pa=P_flat,          # (nlev, ncol)
+        T_prof_K=T_flat,
+        RH=RH_flat,                      # (nlev, ncol)
+        station_alt_m=alt_s,       # scalar station altitude ASL
+        z_surf_model=z_surf_flat,  # (ncol,) surface height ASL per column
+)
 
-    # idx_levels, p_levels_hPa, z_levels_m are 1D arrays of length ncol
-    # you can reshape back to (Ny_box, Nx_box) if needed:
+# Reshape back to (Ny_box, Nx_box)
     idx_levels_2d = idx_levels.reshape(Ny_box, Nx_box)
     p_levels_hPa_2d = p_levels_hPa.reshape(Ny_box, Nx_box)
     z_levels_m_2d = z_levels_m.reshape(Ny_box, Nx_box)
-    '''
+
+    
 
     data_var = ds_small[species]          # e.g. species = "O3"
     units = data_var.attrs.get("units", "")
