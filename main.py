@@ -160,7 +160,7 @@ def main():
     z0=z_surf_model,
 )
     
-
+    ''' #uncomment if we have 2d data
     # T_box, P_box, RH_box: shape (lev, Ny_box, Nx_box)
     T_box = ds_T["T"].isel(time=0, lat=slice(i1, i2+1), lon=slice(j1, j2+1)).values
     P_box = ds_PL["PL"].isel(time=0, lat=slice(i1, i2+1), lon=slice(j1, j2+1)).values
@@ -197,7 +197,7 @@ def main():
     p_levels_hPa_2d = p_levels_hPa.reshape(Ny_box, Nx_box)
     z_levels_m_2d = z_levels_m.reshape(Ny_box, Nx_box)
 
-    
+    '''
 
     data_var = ds_small[species]          # e.g. species = "O3"
     units = data_var.attrs.get("units", "")
