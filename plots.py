@@ -7,7 +7,25 @@ from matplotlib.patches import Rectangle
 import matplotlib.ticker as ticker
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import os
+import re
 
+def _sanitize_filename(s: str) -> str:
+    # keep it filesystem-safe
+    s = re.sub(r"\s+", "_", str(s).strip())
+    s = re.sub(r"[^A-Za-z0-9_.-]+", "", s)
+    return s
+
+
+def save_figure(fig, out_dir, filename_base, dpi=200):
+    """
+    Save a matplotlib figure as PNG into out_dir with a safe filename.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    fname = _sanitize_filename(filename_base) + ".png"
+    path = os.path.join(out_dir, fname)
+    fig.savefig(path, dpi=dpi, bbox_inches="tight")
+    return path
 
 def plot_variable_on_map(
     lats_small,
@@ -330,50 +348,45 @@ def plot_profile_T_Z(T_prof_K, z_prof_m, idx_level,
 
     return fig, ax
 
-def plot_profile_T_logP(p_prof_Pa, T_prof_K, idx_level,
-                        time_str=None, ax=None):
+def plot_profile_T_logP(p_prof_Pa, T_prof_K, idx_level, time_str=None, ax=None):
     """
-    Plot vertical profile: Temperature (°C) vs log10(P [hPa]),
-    with red dot at idx_level.
-
-    Parameters
-    ----------
-    p_prof_Pa : 1D array, pressure in Pa
-    T_prof_K  : 1D array, temperature in K
-    idx_level : int, selected model level index
-    time_str  : optional, string for title
-    ax        : optional Axes
-
-    Returns (fig, ax)
+    Temperature vs Pressure with log-pressure vertical axis (ticks labeled in hPa).
+    Red dot indicates the selected model level.
     """
     p_hPa = np.asarray(p_prof_Pa) / 100.0
     T_C = np.asarray(T_prof_K) - 273.15
 
-    # sort by pressure (surface → top)
-    p_sorted, T_sorted, idx_sorted = _sort_by_pressure_with_index(
-        p_hPa, idx_level, T_C
-    )
-
-    # log10 of pressure
-    logP = np.log10(p_sorted)
+    # Sort surface→top and track selected index
+    p_sorted, T_sorted, idx_sorted = _sort_by_pressure_with_index(p_hPa, idx_level, T_C)
 
     if ax is None:
         fig, ax = plt.subplots()
     else:
         fig = ax.figure
 
-    ax.plot(T_sorted, logP, "-o")
-    ax.scatter(T_sorted[idx_sorted], logP[idx_sorted],
+    ax.plot(T_sorted, p_sorted, "-o")
+    ax.scatter(T_sorted[idx_sorted], p_sorted[idx_sorted],
                color="red", zorder=3, label="Selected level")
 
+    # Log pressure axis with nice pressure ticks
+    ax.set_yscale("log")          # base-10 log axis (standard)
+    ax.invert_yaxis()             # pressure decreases upward
+
+    p_ticks = [1000, 700, 500, 300, 200, 100, 70, 50, 30, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1,0.01]
+    p_ticks = [t for t in p_ticks if p_sorted.min() <= t <= p_sorted.max()]
+    if p_ticks:
+        ax.yaxis.set_major_locator(ticker.FixedLocator(p_ticks))
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{y:g}"))
+
     ax.set_xlabel("Temperature (°C)")
-    ax.set_ylabel("log10(Pressure [hPa])")
-    title = "Vertical profile: T–log10(P)"
+    ax.set_ylabel("Pressure (hPa)")
+
+    title = "Vertical profile: T–log(P)"
     if time_str is not None:
         title += f" at {time_str}"
     ax.set_title(title)
 
-    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.grid(True, which="both", linestyle="--", alpha=0.5)
     ax.legend(loc="best")
 
     return fig, ax
@@ -382,52 +395,45 @@ def plot_profile_species_logP(p_prof_Pa, species_prof, idx_level,
                               species_name="species", species_units="",
                               time_str=None, ax=None):
     """
-    Plot vertical profile: species vs log10(P [hPa]),
-    with red dot at idx_level.
-
-    Parameters
-    ----------
-    p_prof_Pa    : 1D array, pressure in Pa
-    species_prof : 1D array, species values (same levels)
-    idx_level    : int, selected model level index
-    species_name : name of species (for labels)
-    species_units: units of species (for labels)
-    time_str     : optional string for title
-    ax           : optional Axes
-
-    Returns (fig, ax)
+    Species vs Pressure with log-pressure vertical axis (ticks labeled in hPa).
+    Red dot indicates the selected model level.
     """
     p_hPa = np.asarray(p_prof_Pa) / 100.0
     sp = np.asarray(species_prof)
 
-    p_sorted, sp_sorted, idx_sorted = _sort_by_pressure_with_index(
-        p_hPa, idx_level, sp
-    )
-
-    logP = np.log10(p_sorted)
+    p_sorted, sp_sorted, idx_sorted = _sort_by_pressure_with_index(p_hPa, idx_level, sp)
 
     if ax is None:
         fig, ax = plt.subplots()
     else:
         fig = ax.figure
 
-    ax.plot(sp_sorted, logP, "-o")
-    ax.scatter(sp_sorted[idx_sorted], logP[idx_sorted],
+    ax.plot(sp_sorted, p_sorted, "-o")
+    ax.scatter(sp_sorted[idx_sorted], p_sorted[idx_sorted],
                color="red", zorder=3, label="Selected level")
+
+    # Log pressure axis with nice pressure ticks
+    ax.set_yscale("log")
+    ax.invert_yaxis()
+
+    p_ticks = [1000, 700, 500, 300, 200, 100, 70, 50, 30, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1,0.01]
+    p_ticks = [t for t in p_ticks if p_sorted.min() <= t <= p_sorted.max()]
+    if p_ticks:
+        ax.yaxis.set_major_locator(ticker.FixedLocator(p_ticks))
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{y:g}"))
 
     xlabel = species_name
     if species_units:
-        xlabel += f" [{species_units}]"
-
+        xlabel += f" ({species_units})"
     ax.set_xlabel(xlabel)
-    ax.set_ylabel("log10(Pressure [hPa])")
+    ax.set_ylabel("Pressure (hPa)")
 
-    title = f"{species_name}–log10(P)"
+    title = f"{species_name}–log(P)"
     if time_str is not None:
         title += f" at {time_str}"
     ax.set_title(title)
 
-    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.grid(True, which="both", linestyle="--", alpha=0.5)
     ax.legend(loc="best")
 
     return fig, ax
@@ -479,7 +485,7 @@ def plot_profile_species_Z(z_prof_m, species_prof, idx_level,
 
     xlabel = species_name
     if species_units:
-        xlabel += f" [{species_units}]"
+        xlabel += f" ({species_units})"
 
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)

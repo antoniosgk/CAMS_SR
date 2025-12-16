@@ -21,8 +21,7 @@ from plots import (plot_variable_on_map,plot_rectangles,
     plot_profile_T_Z,
     plot_profile_T_logP,
     plot_profile_species_logP,
-    plot_profile_species_Z,
-)
+    plot_profile_species_Z,save_figure)
 """
 /
 This comment section includes all the variables,the functions,their names
@@ -39,6 +38,7 @@ def main():
     name=None #name of the station
     cell_nums = 4 #numb of cells that will plotted n**2
     d_zoom=0.4 #zoom of plots
+    out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
     #-----------
     stations = load_stations(stations_path)
     station = select_station(stations, idx)
@@ -194,7 +194,7 @@ def main():
     tidx = 0
     time_val = data_var["time"].values[tidx]
     # quick, generic string:
-    time_str = str(time_val)
+    time_str = pd.to_datetime(time_val).strftime("%Y-%m-%d %H:%M")
     data_arr = ds_small[var_name].isel({'time': 0,
                                    'lev': idx_level}).values
     
@@ -255,6 +255,7 @@ def main():
      species_units=units,
      time_str=time_str,
     )
+    
 
 # species–Z
     fig_SZ, ax_SZ = plot_profile_species_Z(
@@ -268,6 +269,21 @@ def main():
 )
 
     plt.show()
+    
+    save_figure(fig1, out_dir, f"map_{species}_{name}_{time_str}")
+    save_figure(fig2, out_dir, f"map_with sectors_{species}_{name}_{time_str}")
+    save_figure(fig_PT, out_dir, f"map_P_T_{time_str}")
+    save_figure(fig_TlogP, out_dir, f"map_T_lnP_{name}_{time_str}")
+    save_figure(fig_SlogP, out_dir, f"map_S_lnP_{species}_{name}_{time_str}")
+    save_figure(fig_SZ, out_dir, f"map_S-Z{species}_{name}_{time_str}")
+    save_figure(fig_TZ, out_dir, f"map_T-Z{species}_{name}_{time_str}")
+    
+
+
+
+
+
+
 
 
 if __name__ == "__main__":
