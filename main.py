@@ -36,8 +36,8 @@ lat_s
 def main():
     idx=5 #index of station of the stations_file
     name=None #name of the station
-    cell_nums = 4 #numb of cells that will plotted n**2
-    d_zoom=1.0 #zoom of plots
+    cell_nums = 10 #numb of cells that will plotted n**2
+    d_zoom=2.0 #zoom of plots
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
     #-----------
     stations = load_stations(stations_path)

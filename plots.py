@@ -91,7 +91,7 @@ def plot_variable_on_map(
         LON2D,
         LAT2D,
         data_arr,
-        cmap="turbo",
+        cmap="viridis",
         shading="auto",
         norm=norm,
         transform=ccrs.PlateCarree(),alpha=0.6,zorder=2
@@ -111,6 +111,7 @@ def plot_variable_on_map(
     ax.add_feature(cfeature.OCEAN, facecolor="white", zorder=0)
     ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=0)
     ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
+    plt.colorbar(im, ax=ax, pad=0.02, label=units)
     step = 0.5  # degrees
 
     # Build tick values aligned to step
@@ -233,7 +234,7 @@ def plot_rectangles(
         ax.add_patch(rect)
 
     # Colorbar and title
-    plt.colorbar(im, ax=ax, pad=0.02, label=units)
+    #plt.colorbar(im, ax=ax, pad=0.02, label=units)
     # Title consistent with map
     if units:
         base_title = f"{species_name} ({units})"
