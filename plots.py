@@ -8,6 +8,7 @@ import matplotlib.ticker as ticker
 import cartopy.crs as ccrs
 from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 import cartopy.feature as cfeature
+import cartopy.io.img_tiles as cimgt
 import os
 import re
 
@@ -67,20 +68,12 @@ def plot_variable_on_map(
     lat_min, lat_max = lat_s - d, lat_s + d
     ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=proj)
     #ax.add_feature(cfeature.ShadedRelief(), zorder=0)
-
-    # Optional: coastlines/borders on top of relief
-    ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=3)
-    ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=3)
-
     #ax.stock_img() # background topography-like
-    # Ticks
-    xticks = np.arange(lon_min, lon_max + 0.1, 0.5)
-    yticks = np.arange(lat_min, lat_max + 0.1, 0.5)
     #ax.set_xticks(xticks, crs=proj)
     #ax.set_yticks(yticks, crs=proj)
-    ax.set_xticklabels(xticks, rotation=45, ha="right")
-    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter("{x:.1f}"))
 
+    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter("{x:.1f}"))
+    ax.yaxis.set_major_formatter(ticker.StrMethodFormatter("{x:.1f}"))
     # Lon/lat grids
     if lats_small.ndim == 1 and lons_small.ndim == 1:
         LON2D, LAT2D = np.meshgrid(lons_small, lats_small)
@@ -101,7 +94,7 @@ def plot_variable_on_map(
         cmap="turbo",
         shading="auto",
         norm=norm,
-        transform=ccrs.PlateCarree(),alpha=0.78,zorder=2
+        transform=ccrs.PlateCarree(),alpha=0.6,zorder=2
     )
 
     # Station marker
@@ -118,24 +111,38 @@ def plot_variable_on_map(
     ax.add_feature(cfeature.OCEAN, facecolor="white", zorder=0)
     ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=0)
     ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
+    step = 0.5  # degrees
+
+    # Build tick values aligned to step
+    lon0 = np.floor(lon_min / step) * step
+    lon1 = np.ceil(lon_max / step) * step
+    lat0 = np.floor(lat_min / step) * step
+    lat1 = np.ceil(lat_max / step) * step
+
+    xticks = np.round(np.arange(lon0, lon1 + 0.5 * step, step), 6)
+    yticks = np.round(np.arange(lat0, lat1 + 0.5 * step, step), 6)
+
     gl = ax.gridlines(
-        crs=ccrs.PlateCarree(),
-        draw_labels=True,
-        linewidth=0.5,
-        alpha=0.01,
-        linestyle="--",
-        zorder=5
+     crs=ccrs.PlateCarree(),
+     draw_labels=True,
+     linewidth=0,
+     alpha=0.01,          # set this >0 so gridlines are visible; labels still show even if tiny
+     linestyle="--",
+     zorder=5,
     )
+
     gl.top_labels = False
     gl.right_labels = False
 
-    # DMS-style labels (degrees/minutes/seconds). This gives the ° and ' style.
+    gl.xlocator = ticker.FixedLocator(xticks)
+    gl.ylocator = ticker.FixedLocator(yticks)
+
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
 
-    # Control tick spacing (example: every 0.2 degrees)
-    gl.xlocator = ticker.MultipleLocator(0.2)
-    gl.ylocator = ticker.MultipleLocator(0.2)
+# Optional: nicer label styling
+    gl.xlabel_style = {"size": 9}
+    gl.ylabel_style = {"size": 9}
 
     if units:
         base_title = f"{species_name} ({units})"
