@@ -40,7 +40,8 @@ def plot_variable_on_map(
     proj=None,
     ax=None,
     d=5,
-    time_str=None
+    time_str=None,
+    meta=None
 ):
     """
     Plot a 2D variable (data_arr) on a map around a station.
@@ -112,7 +113,7 @@ def plot_variable_on_map(
     ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=0)
     ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
     plt.colorbar(im, ax=ax, pad=0.02, label=units)
-    step = 0.5  # degrees
+    step = 0.4  # degrees
 
     # Build tick values aligned to step
     lon0 = np.floor(lon_min / step) * step
@@ -127,7 +128,7 @@ def plot_variable_on_map(
      crs=ccrs.PlateCarree(),
      draw_labels=True,
      linewidth=0,
-     alpha=0.01,          # set this >0 so gridlines are visible; labels still show even if tiny
+     alpha=0.01,          
      linestyle="--",
      zorder=5,
     )
@@ -144,20 +145,33 @@ def plot_variable_on_map(
 # Optional: nicer label styling
     gl.xlabel_style = {"size": 9}
     gl.ylabel_style = {"size": 9}
+    if meta is None:
+        title = f"{species_name} ({units})"
+        if time_str is not None:
+          title += f" at {time_str}"
+    else:
+        title = (
+        f"{meta['species']} ({meta['units']}) at {meta['time_str']}\n"
+        f"Station {meta['station_name']}: "
+        f"({meta['station_lat']:.2f}, {meta['station_lon']:.2f}), alt={meta['station_alt']:.1f} m | "
+        f"Model: ({meta['model_lat']:.2f}, {meta['model_lon']:.2f}), "
+        f"Lev={meta['model_level']}, Alt={meta['z_level_m']:.1f} m"
+    )
+    ax.set_title(title)
 
-    if units:
+    '''if units:
         base_title = f"{species_name} ({units})"
     else:
         base_title = species_name
 
     if time_str is not None:
-        title = f"{base_title} at {time_str}.6f"
+        title = f"{base_title} at {time_str}"
     else:
         title = base_title
 
     ax.set_title(title)
 
-
+    '''
     return fig, ax, im
 
 
@@ -170,7 +184,8 @@ def plot_rectangles(
     im,
     units="",
     species_name="var",
-    time_str= None
+    time_str= None,
+    meta=None
 ):
     """
     Plot the 3 sector rectangles (S1, S2, S3) around the central grid cell (ii, jj)
@@ -236,17 +251,19 @@ def plot_rectangles(
     # Colorbar and title
     #plt.colorbar(im, ax=ax, pad=0.02, label=units)
     # Title consistent with map
-    if units:
-        base_title = f"{species_name} ({units})"
+    if meta is None:
+        title = f"{species_name} ({units})"
+        if time_str is not None:
+          title += f" at {time_str}"
     else:
-        base_title = species_name
-
-    if time_str is not None:
-        title = f"{base_title} at {time_str}"
-    else:
-        title = base_title
-
-    ax.set_title(f"{title} around station")
+        title = (
+        f"{meta['species']} ({meta['units']}) at {meta['time_str']}\n"
+        f"Station {meta['station_name']}: "
+        f"({meta['station_lat']:.2f}, {meta['station_lon']:.2f}), alt={meta['station_alt']:.1f} m | "
+        f"Model: ({meta['model_lat']:.2f}, {meta['model_lon']:.2f}), "
+        f"Lev={meta['model_level']}, Alt={meta['z_level_m']:.1f} m"
+    )
+    ax.set_title(title)
     
     return ax,im
 
@@ -380,7 +397,7 @@ def plot_profile_T_Z(T_prof_K, z_prof_m, idx_level,
 
     return fig, ax
 
-def plot_profile_T_logP(p_prof_Pa, T_prof_K, idx_level, time_str=None, ax=None):
+def plot_profile_T_logP(p_prof_Pa, T_prof_K, idx_level, time_str=None, ax=None,meta=None):
     """
     Temperature vs Pressure with log-pressure vertical axis (ticks labeled in hPa).
     Red dot indicates the selected model level.
@@ -404,7 +421,7 @@ def plot_profile_T_logP(p_prof_Pa, T_prof_K, idx_level, time_str=None, ax=None):
     ax.set_yscale("log")          # base-10 log axis (standard)
     ax.invert_yaxis()             # pressure decreases upward
 
-    p_ticks = [1000, 700, 500, 300, 200, 100, 70, 50, 30, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1,0.01]
+    p_ticks = [1000, 700, 500, 300, 200, 100, 70, 50, 30, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1,0.05]
     p_ticks = [t for t in p_ticks if p_sorted.min() <= t <= p_sorted.max()]
     if p_ticks:
         ax.yaxis.set_major_locator(ticker.FixedLocator(p_ticks))
@@ -413,9 +430,20 @@ def plot_profile_T_logP(p_prof_Pa, T_prof_K, idx_level, time_str=None, ax=None):
     ax.set_xlabel("Temperature (°C)")
     ax.set_ylabel("Pressure (hPa)")
 
-    title = "Vertical profile: T–log(P)"
-    if time_str is not None:
-        title += f" at {time_str}"
+    title = "Vertical profile: T–P"
+    if meta is None:
+        title = f"{title}"
+        if time_str is not None:
+          title += f" at {time_str}"
+    else:
+        title = (
+        f"{title}"    
+        f"{meta['species']} ({meta['units']}) at {meta['time_str']}\n"
+        f"Station {meta['station_name']}: "
+        f"({meta['station_lat']:.2f}, {meta['station_lon']:.2f}), alt={meta['station_alt']:.1f} m | "
+        f"Model: ({meta['model_lat']:.2f}, {meta['model_lon']:.2f}), "
+        f"Lev={meta['model_level']}, Alt={meta['z_level_m']:.1f} m"
+    )
     ax.set_title(title)
 
     ax.grid(True, which="both", linestyle="--", alpha=0.5)
@@ -448,7 +476,7 @@ def plot_profile_species_logP(p_prof_Pa, species_prof, idx_level,
     ax.set_yscale("log")
     ax.invert_yaxis()
 
-    p_ticks = [1000, 700, 500, 300, 200, 100, 70, 50, 30, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1,0.01]
+    p_ticks = [1000, 700, 500, 300, 200, 100, 70, 50, 30, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1,0.05]
     p_ticks = [t for t in p_ticks if p_sorted.min() <= t <= p_sorted.max()]
     if p_ticks:
         ax.yaxis.set_major_locator(ticker.FixedLocator(p_ticks))
@@ -460,7 +488,7 @@ def plot_profile_species_logP(p_prof_Pa, species_prof, idx_level,
     ax.set_xlabel(xlabel)
     ax.set_ylabel("Pressure (hPa)")
 
-    title = f"{species_name}–log(P)"
+    title = f"{species_name}–P"
     if time_str is not None:
         title += f" at {time_str}"
     ax.set_title(title)

@@ -7,84 +7,17 @@ import numpy as np
 import metpy.calc as mpcalc
 from metpy.units import units
 from metpy.constants import Rd, g  
-'''
-def metpy_compute_heights(p_prof_Pa, T_prof_K, qv=None, RH=None, z0=0.0):
+import warnings
+
+   
+def metpy_compute_heights(p_prof_Pa, T_prof_K, RH=None, z0=0.0):
     """
     Compute geometric heights from pressure + temperature using the hypsometric equation
-    (MetPy version). Works with model-level midpoint values.
-
-    Parameters
-    ----------
-    p_prof_Pa : array-like
-        Pressure profile in Pa (no units attached yet).
-    T_prof_K : array-like
-        Temperature profile in K (no units attached yet).
-    qv : array-like, optional
-        Specific humidity [kg/kg]. If provided, used to compute virtual temperature.
-    RH : array-like, optional
-        Relative humidity (dimensionless, 0–1 or %, depending on how you handle it).
-    z0 : float, optional
-        Starting height [m].
-
-    Returns
-    -------
-    z : ndarray
-        Height profile in meters (plain numpy array, no units).
-    """
-
-    # Attach units
-    p = np.asarray(p_prof_Pa) * units.pascal
-    T = np.asarray(T_prof_K) * units.kelvin
-
-    # Compute virtual temperature
-    if qv is not None:
-        # assume qv is kg/kg without units
-        qv_q = np.asarray(qv) * units('kg/kg')
-        Tv = mpcalc.virtual_temperature(T, qv_q)
-
-    elif RH is not None:
-        RH_arr = np.asarray(RH)
-
-        # If your RH is in %, convert to fraction here:
-        # RH_q = (RH_arr / 100.0) * units.dimensionless
-        # If it's already 0–1, use:
-        RH_q = RH_arr * units.dimensionless
-
-        mixing_ratio = mpcalc.mixing_ratio_from_relative_humidity(p, T, RH_q)
-        Tv = mpcalc.virtual_temperature(T, mixing_ratio)
-
-    else:
-        Tv = T
-
-    nlev = len(p)
-    z = np.empty(nlev) * units.meter
-
-    # Find index of maximum pressure (assume this is "surface")
-    k_surf = int(np.argmax(p.magnitude))
-    z[k_surf] = z0 * units.meter  # anchor at model surface
-
-    # Integrate upward (towards lower pressure)
-    for k in range(k_surf - 1, -1, -1):
-        Tv_layer = 0.5 * (Tv[k + 1] + Tv[k])
-        dz = (Rd * Tv_layer / g) * np.log(p[k + 1] / p[k])
-        z[k] = z[k + 1] + dz
-
-    # Integrate downward (if any levels have p > surface)
-    for k in range(k_surf + 1, nlev):
-        Tv_layer = 0.5 * (Tv[k - 1] + Tv[k])
-        dz = (Rd * Tv_layer / g) * np.log(p[k - 1] / p[k])
-        z[k] = z[k - 1] + dz
-
-    return z.magnitude
-'''
-def metpy_compute_heights(p_prof_Pa, T_prof_K, qv=None, RH=None, z0=0.0):
-    """
-    Compute geometric heights from pressure + temperature using the hypsometric equation
-    (MetPy version). Works with model-level midpoint values.
+    (MetPy version), optionally using RH to compute virtual temperature.
 
     Supports:
-      - 1D profiles: p_prof_Pa.shape == (nlev,)
-      - 2D profiles: p_prof_Pa.shape == (nlev, ncol), broadcasting over columns.
+      - 1D profiles: (nlev,)
+      - 2D profiles: (nlev, ncol)
 
     Parameters
     ----------
@@ -92,8 +25,6 @@ def metpy_compute_heights(p_prof_Pa, T_prof_K, qv=None, RH=None, z0=0.0):
         Pressure profile in Pa.
     T_prof_K : array-like
         Temperature profile in K (same shape as p_prof_Pa).
-    qv : array-like, optional
-        Specific humidity [kg/kg]. If provided, used to compute virtual temperature.
     RH : array-like, optional
         Relative humidity (0–1 or 0–100). If provided, used to compute virtual temperature.
     z0 : float or array-like, optional
@@ -103,52 +34,38 @@ def metpy_compute_heights(p_prof_Pa, T_prof_K, qv=None, RH=None, z0=0.0):
     Returns
     -------
     z : ndarray
-        Height(s) in meters (same shape as p_prof_Pa, i.e. (nlev,) or (nlev, ncol)).
+        Heights in meters, same shape as p_prof_Pa.
     """
+
     p_arr = np.asarray(p_prof_Pa, dtype=float)
     T_arr = np.asarray(T_prof_K, dtype=float)
 
     if p_arr.shape != T_arr.shape:
         raise ValueError("p_prof_Pa and T_prof_K must have the same shape.")
 
-    # RH shape check if provided
     RH_arr = None
     if RH is not None:
         RH_arr = np.asarray(RH, dtype=float)
         if RH_arr.shape != p_arr.shape:
             raise ValueError("RH must have the same shape as p_prof_Pa and T_prof_K.")
 
-    # qv shape check if provided
-    if qv is not None:
-        qv_arr = np.asarray(qv, dtype=float)
-        if qv_arr.shape != p_arr.shape:
-            raise ValueError("qv must have the same shape as p_prof_Pa and T_prof_K.")
-    else:
-        qv_arr = None
-
-    # Make sure pressure is strictly positive to avoid log problems
-    # (tiny floor; keeps ratios finite)
-    p_arr = np.where(np.isfinite(p_arr) & (p_arr > 0.0), p_arr, np.nan)
+    # Pressure must be positive for logs
     p_floor = 1.0e-6  # Pa
+    p_arr = np.where(np.isfinite(p_arr) & (p_arr > 0.0), p_arr, np.nan)
     p_arr = np.where(np.isfinite(p_arr), np.maximum(p_arr, p_floor), np.nan)
 
-    # Temperature finite check (fallback to NaN; we'll handle later)
+    # Temperature finite check
     T_arr = np.where(np.isfinite(T_arr), T_arr, np.nan)
 
     # Attach units
     p = p_arr * units.pascal
     T = T_arr * units.kelvin
 
-    # ---- Virtual temperature selection ----
-    if qv_arr is not None and RH_arr is not None:
-        print("INFO: Both qv and RH provided; using qv for virtual temperature.")
-
-    if qv_arr is not None:
-        print("INFO: Using qv (specific humidity) for virtual temperature.")
-        qv_q = qv_arr * units("kg/kg")
-        Tv = mpcalc.virtual_temperature(T, qv_q)
-
-    elif RH_arr is not None:
+    # ----- Virtual temperature: RH provided or not -----
+    if RH_arr is None:
+        print("INFO: No RH provided; using dry temperature T for virtual temperature.")
+        Tv = T
+    else:
         print("INFO: Using RH (relative humidity) for virtual temperature.")
 
         # Auto-detect RH convention: if max > 1.5 assume percent
@@ -158,42 +75,48 @@ def metpy_compute_heights(p_prof_Pa, T_prof_K, qv=None, RH=None, z0=0.0):
         else:
             RH_frac = RH_arr
 
-        # Clip to physical bounds
         RH_frac = np.clip(RH_frac, 0.0, 1.0)
         RH_q = RH_frac * units.dimensionless
 
-        # mixing ratio can be undefined in some regimes; handle safely
-        try:
-            mixing_ratio = mpcalc.mixing_ratio_from_relative_humidity(p, T, RH_q)
-        except Exception:
-            # Hard fallback: dry air
-            mixing_ratio = np.zeros_like(p_arr) * units("kg/kg")
+        # Mask invalid regimes where saturation vapor pressure exceeds total pressure
+        e_s = mpcalc.saturation_vapor_pressure(T)  # Pa
+        valid = np.isfinite(p.magnitude) & np.isfinite(T.magnitude) & (p > e_s)
 
-        # Replace invalid mixing_ratio with 0 (dry fallback)
-        mr = mixing_ratio.to("kg/kg").magnitude
-        mr = np.where(np.isfinite(mr) & (mr >= 0.0), mr, 0.0)
+        mr = np.zeros_like(p_arr, dtype=float)  # dry fallback
+
+        if np.any(valid):
+            p_valid = p[valid]
+            T_valid = T[valid]
+            RH_valid = RH_q[valid]
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="Saturation mixing ratio is undefined*",
+                    category=UserWarning,
+                )
+                mr_valid = mpcalc.mixing_ratio_from_relative_humidity(p_valid, T_valid, RH_valid)
+
+            mr_valid = mr_valid.to("kg/kg").magnitude
+            mr_valid = np.where(np.isfinite(mr_valid) & (mr_valid >= 0.0), mr_valid, 0.0)
+            mr[valid] = mr_valid
+
         mixing_ratio = mr * units("kg/kg")
-
         Tv = mpcalc.virtual_temperature(T, mixing_ratio)
 
-    else:
-        print("INFO: No humidity provided; using dry temperature T for virtual temperature.")
-        Tv = T
-
-    # Ensure Tv is finite; fallback to T where needed
+    # Ensure Tv finite (fallback to T where needed)
     Tv_mag = Tv.to("kelvin").magnitude
     T_mag = T.to("kelvin").magnitude
     Tv_mag = np.where(np.isfinite(Tv_mag), Tv_mag, T_mag)
     Tv = Tv_mag * units.kelvin
 
-    # If T itself has NaNs, replace remaining NaNs with a benign value to avoid breaking integration
-    # (will still reflect in output if pressure/temperature are bad)
+    # If still any NaNs, replace with benign value to keep integration stable
     Tv_mag = Tv.to("kelvin").magnitude
     if np.any(~np.isfinite(Tv_mag)):
         Tv_mag = np.where(np.isfinite(Tv_mag), Tv_mag, 250.0)
         Tv = Tv_mag * units.kelvin
 
-    # ---- Hypsometric integration ----
+    # ----- Hypsometric integration -----
     if p.ndim == 1:
         nlev = p.shape[0]
         z = np.empty(nlev) * units.meter
@@ -201,14 +124,14 @@ def metpy_compute_heights(p_prof_Pa, T_prof_K, qv=None, RH=None, z0=0.0):
         k_surf = int(np.nanargmax(p.magnitude))
         z[k_surf] = float(z0) * units.meter
 
-        # Upward integration (toward lower pressure)
+        # upward (toward lower p)
         for k in range(k_surf - 1, -1, -1):
             Tv_layer = 0.5 * (Tv[k + 1] + Tv[k])
             ratio = p[k + 1] / p[k]
             dz = (Rd * Tv_layer / g) * np.log(ratio)
             z[k] = z[k + 1] + dz
 
-        # Downward integration (if any levels have p > surface)
+        # downward (if any p > surface)
         for k in range(k_surf + 1, nlev):
             Tv_layer = 0.5 * (Tv[k - 1] + Tv[k])
             ratio = p[k - 1] / p[k]
@@ -231,10 +154,11 @@ def metpy_compute_heights(p_prof_Pa, T_prof_K, qv=None, RH=None, z0=0.0):
         else:
             raise ValueError("For 2D p/T, z0 must be scalar or shape (ncol,)")
 
+        # anchor each column at its surface
         for j in range(ncol):
             z[k_surf[j], j] = z_surf[j]
 
-        # Upward integration (k decreasing)
+        # integrate upward (k decreasing)
         for k in range(nlev - 2, -1, -1):
             mask = k < k_surf
             if not np.any(mask):
@@ -244,7 +168,7 @@ def metpy_compute_heights(p_prof_Pa, T_prof_K, qv=None, RH=None, z0=0.0):
             dz = (Rd * Tv_layer / g) * np.log(ratio)
             z[k, mask] = z[k + 1, mask] + dz
 
-        # Downward integration (k increasing)
+        # integrate downward (k increasing)
         for k in range(1, nlev):
             mask = k > k_surf
             if not np.any(mask):
@@ -258,6 +182,7 @@ def metpy_compute_heights(p_prof_Pa, T_prof_K, qv=None, RH=None, z0=0.0):
 
     else:
         raise ValueError("metpy_compute_heights currently supports only 1D or 2D p/T profiles.")
+
 
 '''
 def metpy_find_level_index(p_prof_Pa, T_prof_K, station_alt_m,
@@ -318,7 +243,6 @@ def metpy_find_level_index(p_prof_Pa, T_prof_K, station_alt_m,
     z_prof = metpy_compute_heights(
         p_prof_Pa=p_arr,
         T_prof_K=T_arr,
-        qv=qv,
         RH=RH_arr,
         z0=z_surf_model,
     )

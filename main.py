@@ -34,10 +34,10 @@ lat_s
 """
 #%%
 def main():
-    idx=5 #index of station of the stations_file
+    idx=2 #index of station of the stations_file
     name=None #name of the station
-    cell_nums = 10 #numb of cells that will plotted n**2
-    d_zoom=2.0 #zoom of plots
+    cell_nums = 4 #numb of cells that will plotted n**2
+    d_zoom=0.8 #zoom of plots
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
     #-----------
     stations = load_stations(stations_path)
@@ -210,7 +210,21 @@ def main():
     data_arr = ds_small[var_name].isel({'time': 0,
                                    'lev': idx_level}).values
     
-    
+    meta = {
+    "station_name": name,
+    "station_lat": lat_s,
+    "station_lon": lon_s,
+    "station_alt": alt_s,
+    "model_lat": float(lats[i]) if np.ndim(lats) == 1 else float(lats[i, j]),
+    "model_lon": float(lons[j]) if np.ndim(lons) == 1 else float(lons[i, j]),
+    "model_level": int(idx_level),
+    "model_p_hPa": float(p_level_hPa),
+    "z_level_m":float(z_level_m),
+    "time_str": time_str,
+    "species": species,
+    "units": units,
+    }
+
     fig1, ax1, im1 = plot_variable_on_map(
     lats_small,
     lons_small,
@@ -220,7 +234,8 @@ def main():
     units=units,
     species_name=species,
     d=d_zoom,
-    time_str=time_str
+    time_str=time_str,
+    meta=meta
     )
     
     fig2, ax2, im2 = plot_variable_on_map(
@@ -232,7 +247,8 @@ def main():
     units=units,
     species_name=species,
     d=d_zoom,
-    time_str=time_str
+    time_str=time_str,
+    meta=meta
     )
 
     plot_rectangles(
@@ -244,7 +260,8 @@ def main():
     im2,
     units=units,
     species_name=species,
-    time_str=time_str
+    time_str=time_str,
+    meta=meta
     )
 
     # P–T
@@ -256,7 +273,7 @@ def main():
 
     # T–logP
     fig_TlogP, ax_TlogP = plot_profile_T_logP(p_prof, T_prof, idx_level,
-                                          time_str=time_str)
+                                          time_str=time_str,meta=meta)
 
 # species–logP
     fig_SlogP, ax_SlogP = plot_profile_species_logP(
