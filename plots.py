@@ -252,6 +252,292 @@ def plot_rectangles(
     return ax,im
 
 
+
+'''
+
+
+def plot_variable_on_map(
+    lats_small,           # 1D (Ny,)
+    lons_small,           # 1D (Nx,)
+    data_arr,             # 2D (Ny, Nx)
+    lon_s, lat_s,
+    units="",
+    species_name="var",
+    time_str=None,
+    meta=None,
+    # Option A inputs
+    z_orog_m=None,        # 2D (Ny, Nx) orography height (m) for same domain
+    add_orog_contours=True,
+    # Choose backend
+    backend="cartopy",    # "cartopy" (A) or "folium" (C)
+    # Window around station
+    d=0.4,
+    # Visual tuning
+    field_alpha=0.80,
+    hillshade_alpha=0.35,
+    # Folium tuning
+    folium_tiles="Stamen Terrain",
+    folium_zoom=9,
+):
+    """
+    Returns:
+      - cartopy: (fig, ax, im)
+      - folium : (m, None, None)
+    """
+    lats_small = np.asarray(lats_small, dtype=float)
+    lons_small = np.asarray(lons_small, dtype=float)
+    arr = np.asarray(data_arr, dtype=float)
+
+    # grid
+    LON2D, LAT2D = np.meshgrid(lons_small, lats_small)
+
+    # extent
+    lon_min, lon_max = lon_s - d, lon_s + d
+    lat_min, lat_max = lat_s - d, lat_s + d
+
+    # -------------------------
+    # OPTION C (Folium)
+    # -------------------------
+    if backend.lower() == "folium":
+        # If you don't want Folium, comment out this whole block.
+        import folium
+        import io, base64
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import Normalize
+        import matplotlib.cm as cm
+
+        vmin = np.nanmin(arr)
+        vmax = np.nanmax(arr)
+        norm = Normalize(vmin=vmin, vmax=vmax)
+        cmap = cm.get_cmap("turbo")
+
+        rgba = cmap(norm(arr))
+        rgba[..., -1] = np.where(np.isfinite(arr), field_alpha, 0.0)
+
+        fig_tmp, ax_tmp = plt.subplots(figsize=(6, 6), dpi=220)
+        ax_tmp.axis("off")
+        ax_tmp.imshow(rgba, origin="lower")
+        buf = io.BytesIO()
+        fig_tmp.savefig(buf, format="png", bbox_inches="tight", pad_inches=0, transparent=True)
+        plt.close(fig_tmp)
+        png_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+        # bounds from the grid (more correct than lon_s±d)
+        bounds = [[float(lats_small.min()), float(lons_small.min())],
+                  [float(lats_small.max()), float(lons_small.max())]]
+
+        m = folium.Map(location=[lat_s, lon_s], zoom_start=folium_zoom, tiles=None)
+        folium.TileLayer(folium_tiles, name="Terrain").add_to(m)
+
+        folium.raster_layers.ImageOverlay(
+            image=f"data:image/png;base64,{png_b64}",
+            bounds=bounds,
+            opacity=1.0,
+            interactive=True,
+            cross_origin=False,
+            zindex=10,
+        ).add_to(m)
+
+        popup = None
+        if meta is not None:
+            popup = (
+                f"{meta.get('species', species_name)} ({meta.get('units', units)})<br>"
+                f"time: {meta.get('time_str', time_str)}<br>"
+                f"station: {meta.get('station_name','')} "
+                f"({meta.get('station_lat',lat_s):.4f}, {meta.get('station_lon',lon_s):.4f}), "
+                f"alt={meta.get('station_alt',np.nan):.1f} m<br>"
+                f"model: ({meta.get('model_lat',lat_s):.4f}, {meta.get('model_lon',lon_s):.4f}), "
+                f"lev={meta.get('model_level','?')}, p={meta.get('model_p_hPa',np.nan):.2f} hPa"
+            )
+        folium.Marker([lat_s, lon_s], popup=popup).add_to(m)
+        folium.LayerControl().add_to(m)
+
+        return m, None, None
+
+    # -------------------------
+    # OPTION A (Cartopy + PHIS hillshade)
+    # -------------------------
+    # If you don't want Cartopy, comment out this whole block.
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import Normalize
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+
+    fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()})
+    ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
+
+    # Terrain underlay from your PHIS-derived orography
+    if z_orog_m is not None:
+        z_orog_m = np.asarray(z_orog_m, dtype=float)
+        gy, gx = np.gradient(z_orog_m)
+        shade = 1.0 / np.sqrt(1.0 + gx**2 + gy**2)
+
+        ax.pcolormesh(
+            LON2D, LAT2D, shade,
+            cmap="Greys",
+            shading="auto",
+            alpha=hillshade_alpha,
+            transform=ccrs.PlateCarree(),
+            zorder=0
+        )
+
+        if add_orog_contours:
+            levels = np.arange(0, 7000, 500)
+            cs = ax.contour(
+                LON2D, LAT2D, z_orog_m,
+                levels=levels,
+                linewidths=0.5,
+                alpha=0.5,
+                colors="k",
+                transform=ccrs.PlateCarree(),
+                zorder=1
+            )
+            ax.clabel(cs, inline=True, fontsize=7, fmt="%.0f m")
+
+    ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=2)
+    ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=2)
+
+    norm = Normalize(vmin=np.nanmin(arr), vmax=np.nanmax(arr))
+    im = ax.pcolormesh(
+        LON2D, LAT2D, arr,
+        cmap="turbo",
+        shading="auto",
+        norm=norm,
+        transform=ccrs.PlateCarree(),
+        alpha=field_alpha,
+        zorder=3
+    )
+
+    ax.plot(lon_s, lat_s, "kx", markersize=10, transform=ccrs.PlateCarree(), zorder=4)
+
+    if meta is not None:
+        title = (
+            f"{meta.get('species', species_name)} ({meta.get('units', units)}) at {meta.get('time_str', time_str)}\n"
+            f"Station {meta.get('station_name','')}: ({meta.get('station_lat',lat_s):.4f}, {meta.get('station_lon',lon_s):.4f}), "
+            f"alt={meta.get('station_alt',np.nan):.1f} m | "
+            f"Model: ({meta.get('model_lat',lat_s):.4f}, {meta.get('model_lon',lon_s):.4f}), "
+            f"lev={meta.get('model_level','?')}, p={meta.get('model_p_hPa',np.nan):.2f} hPa"
+        )
+    else:
+        title = f"{species_name} ({units})" + (f" at {time_str}" if time_str else "")
+
+    ax.set_title(title, pad=14)
+    fig.subplots_adjust(top=0.82)
+
+    return fig, ax, im
+
+
+def plot_rectangles(
+    ax_or_map,
+    lats_small,    # 1D
+    lons_small,    # 1D
+    ii, jj,        # center indices in the small domain
+    im=None,       # only used in cartopy
+    units="",
+    species_name="var",
+    time_str=None,
+    meta=None,
+    backend="cartopy",
+):
+    """
+    Returns:
+      - cartopy: (ax, im)
+      - folium : (m, None)
+    """
+    lats_small = np.asarray(lats_small, dtype=float)
+    lons_small = np.asarray(lons_small, dtype=float)
+
+    # center
+    cx = float(lons_small[jj])
+    cy = float(lats_small[ii])
+
+    # grid spacing
+    dlon = float(abs(lons_small[1] - lons_small[0]))
+    dlat = float(abs(lats_small[1] - lats_small[0]))
+
+    sizes = {"S1": 1, "S2": 2, "S3": 3}
+
+    # -------------------------
+    # OPTION C (Folium rectangles)
+    # -------------------------
+    if backend.lower() == "folium":
+        # If you don't want Folium rectangles, comment out this block.
+        import folium
+        m = ax_or_map
+
+        styles = {
+            "S1": dict(color="black", weight=2, fill=False),
+            "S2": dict(color="red", weight=2, fill=False),
+            "S3": dict(color="blue", weight=2, fill=False),
+        }
+
+        for name, r in sizes.items():
+            width = (2 * r + 1) * dlon
+            height = (2 * r + 1) * dlat
+            left = cx - width / 2
+            right = cx + width / 2
+            bottom = cy - height / 2
+            top = cy + height / 2
+
+            folium.Rectangle(
+                bounds=[[bottom, left], [top, right]],
+                tooltip=name,
+                **styles[name]
+            ).add_to(m)
+
+        return m, None
+
+    # -------------------------
+    # OPTION A (Cartopy rectangles)
+    # -------------------------
+    # If you don't want Cartopy rectangles, comment out this block.
+    import matplotlib.pyplot as plt
+    import cartopy.crs as ccrs
+    from matplotlib.patches import Rectangle
+
+    ax = ax_or_map
+
+    rect_styles = {
+        "S1": {"edgecolor": "black", "linewidth": 2},
+        "S2": {"edgecolor": "red",   "linewidth": 2},
+        "S3": {"edgecolor": "blue",  "linewidth": 2},
+    }
+
+    for name, r in sizes.items():
+        width = (2 * r + 1) * dlon
+        height = (2 * r + 1) * dlat
+        left = cx - width / 2
+        bottom = cy - height / 2
+
+        rect = Rectangle(
+            (left, bottom),
+            width,
+            height,
+            facecolor="none",
+            transform=ccrs.PlateCarree(),
+            **rect_styles[name],
+        )
+        ax.add_patch(rect)
+
+    if im is not None:
+        cb = plt.colorbar(im, ax=ax, pad=0.02)
+        cb.set_label(meta.get("units", units) if meta else units)
+
+    if meta is not None:
+        title = (
+            f"{meta.get('species', species_name)} ({meta.get('units', units)}) at {meta.get('time_str', time_str)}\n"
+            f"Station {meta.get('station_name','')}: ({meta.get('station_lat',np.nan):.4f}, {meta.get('station_lon',np.nan):.4f}), "
+            f"alt={meta.get('station_alt',np.nan):.1f} m | "
+            f"Model: ({meta.get('model_lat',np.nan):.4f}, {meta.get('model_lon',np.nan):.4f}), "
+            f"lev={meta.get('model_level','?')}, p={meta.get('model_p_hPa',np.nan):.2f} hPa"
+        )
+        ax.set_title(title, pad=14)
+        ax.figure.subplots_adjust(top=0.82)
+    else:
+        ax.set_title(f"{species_name} with sectors")
+
+    return ax, im
+    '''
 def _sort_by_pressure_with_index(p_hPa, idx_level, *arrays):
     """
     Sort profiles from surface (max p) to top (min p),

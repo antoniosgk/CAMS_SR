@@ -138,6 +138,16 @@ def main():
     p_prof = ds_PL["PL"].values[0, :, i, j]  # Pressure profile for the specific gridcell
     species_prof= ds_species[species].values[0,:,i,j] #here i must put species or var!!!
     RH_prof = ds_RH['RH'].values[0,:,i,j]
+    # PHIS_small aligned to ds_small domain
+    PHIS_small = ds_orog["PHIS"].isel(
+    time=0,
+    lat=slice(i1, i2+1),
+    lon=slice(j1, j2+1)
+    ).values
+
+# Convert geopotential (m^2/s^2) -> height (m)
+    z_orog = PHIS_small / 9.80665
+
     #T_prof = ds_T["T"].isel(time=0, lat=i, lon=j).values   #see if it is better this
     #p_prof = ds_PL["PL"].isel(time=0, lat=i, lon=j).values #or the above
     #  MetPy-based vertical level selection --- metpy_find_level_index
@@ -245,14 +255,42 @@ def main():
     time_str=time_str,
     meta=meta
     )
-    
+    '''
+    fig1, ax1, im1 = plot_variable_on_map(lats_small,
+    lons_small,
+    data_arr_ppb,
+    lon_s,
+    lat_s,
+    units=units_ppb,
+    species_name=species,
+    d=d_zoom,
+    time_str=time_str,
+    meta=meta, z_orog_m=z_orog, backend="cartopy")
+    plt.colorbar(im1, ax=ax1, pad=0.02, label=meta["units"])
+    plt.show()
+
+    fig2, ax2, im2 = plot_variable_on_map(lats_small,
+    lons_small,
+    data_arr_ppb,
+    lon_s,
+    lat_s,
+    units=units_ppb,
+    species_name=species,
+    d=d_zoom,
+    time_str=time_str,
+    meta=meta, z_orog_m=z_orog, backend="cartopy")
+    plot_rectangles(ax2, lats_small, lons_small, ii, jj, im=im2, meta=meta, backend="cartopy")
+    plt.show()
+
+    '''
+
     fig2, ax2, im2 = plot_variable_on_map(
     lats_small,
     lons_small,
-    data_arr,
+    data_arr_ppb,
     lon_s,
     lat_s,
-    units=units,
+    units=units_ppb,
     species_name=species,
     d=d_zoom,
     time_str=time_str,
@@ -271,7 +309,32 @@ def main():
     time_str=time_str,
     meta=meta
     )
+    '''
+    m1, _, _ = plot_variable_on_map(lats_small,
+    lons_small,
+    data_arr,
+    lon_s,
+    lat_s,
+    units=units,
+    species_name=species,
+    d=d_zoom,
+    time_str=time_str,
+    meta=meta, backend="folium")
+    m1.save("map_terrain.html")
 
+    m2, _, _ = plot_variable_on_map(lats_small,
+    lons_small,
+    data_arr,
+    lon_s,
+    lat_s,
+    units=units,
+    species_name=species,
+    d=d_zoom,
+    time_str=time_str,
+    meta=meta, backend="folium")
+    plot_rectangles(m2, lats_small, lons_small, ii, jj, backend="folium")
+    m2.save("map_terrain_with_sectors.html")
+    '''
     # P–T
     fig_PT, ax_PT = plot_profile_P_T(p_prof, T_prof, idx_level, time_str=time_str,meta=meta)
     plt.show()
@@ -289,7 +352,7 @@ def main():
      species_prof_ppb,
      idx_level,
      species_name=species,
-     species_units=units,
+     species_units=units_ppb,
      time_str=time_str,
      meta=meta
     )
@@ -298,10 +361,10 @@ def main():
 # species–Z
     fig_SZ, ax_SZ = plot_profile_species_Z(
     z_prof,
-    species_prof,
+    species_prof_ppb,
     idx_level,
     species_name=species,
-    species_units=units,
+    species_units=units_ppb,
     time_str=time_str,
     z_units="km",
     meta=meta
