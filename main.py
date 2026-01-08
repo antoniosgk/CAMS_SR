@@ -52,7 +52,7 @@ def main():
     ds_orog = xr.open_dataset(orog_file) #nc file with orography
     ds_RH=xr.open_dataset(RH_file)
     print(f"\nSelected station: {name} (lat={lat_s}, lon={lon_s}, alt={alt_s} m)")
-
+    
     #print("T dims:", ds_T["T"].dims)
     #print("PL dims:", ds_PL["PL"].dims)
 
@@ -136,7 +136,7 @@ def main():
     # Extract local profiles
     T_prof = ds_T["T"].values[0, :, i, j] #T profile for the specific gridcell
     p_prof = ds_PL["PL"].values[0, :, i, j]  # Pressure profile for the specific gridcell
-    species_prof= ds_species['O3'].values[0,:,i,j] #here i must put species or var!!!
+    species_prof= ds_species[species].values[0,:,i,j] #here i must put species or var!!!
     RH_prof = ds_RH['RH'].values[0,:,i,j]
     #T_prof = ds_T["T"].isel(time=0, lat=i, lon=j).values   #see if it is better this
     #p_prof = ds_PL["PL"].isel(time=0, lat=i, lon=j).values #or the above
@@ -201,6 +201,7 @@ def main():
 
     data_var = ds_small[species]          # e.g. species = "O3"
     units = data_var.attrs.get("units", "")
+    
 
     # choose time index
     tidx = 0
@@ -224,14 +225,21 @@ def main():
     "species": species,
     "units": units,
     }
-
+    #next 4 lines regard the O3 and its conversion to ppb
+    MW_O3 = 48.0
+    MW_air = 28.9647
+    data_arr_ppb = data_arr * (MW_air / MW_O3) * 1e9
+    species_prof_ppb = species_prof * (MW_air / MW_O3) * 1e9
+    units_ppb = "ppb"
+    meta["units"] = units_ppb
+    #--------------
     fig1, ax1, im1 = plot_variable_on_map(
     lats_small,
     lons_small,
-    data_arr,
+    data_arr_ppb,
     lon_s,
     lat_s,
-    units=units,
+    units=units_ppb,
     species_name=species,
     d=d_zoom,
     time_str=time_str,
@@ -265,11 +273,11 @@ def main():
     )
 
     # P–T
-    fig_PT, ax_PT = plot_profile_P_T(p_prof, T_prof, idx_level, time_str=time_str)
+    fig_PT, ax_PT = plot_profile_P_T(p_prof, T_prof, idx_level, time_str=time_str,meta=meta)
     plt.show()
     # T–Z
     fig_TZ, ax_TZ = plot_profile_T_Z(T_prof, z_prof, idx_level,
-                                 time_str=time_str, z_units="km")
+                                 time_str=time_str, z_units="km",meta=meta)
 
     # T–logP
     fig_TlogP, ax_TlogP = plot_profile_T_logP(p_prof, T_prof, idx_level,
@@ -278,11 +286,12 @@ def main():
 # species–logP
     fig_SlogP, ax_SlogP = plot_profile_species_logP(
      p_prof,
-     species_prof,
+     species_prof_ppb,
      idx_level,
      species_name=species,
      species_units=units,
      time_str=time_str,
+     meta=meta
     )
     
 
@@ -295,6 +304,7 @@ def main():
     species_units=units,
     time_str=time_str,
     z_units="km",
+    meta=meta
 )
 
     plt.show()

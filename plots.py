@@ -29,6 +29,28 @@ def save_figure(fig, out_dir, filename_base, dpi=200):
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
     return path
 
+def build_meta_title(meta, kind=""):
+    """
+    kind: optional short label like 'Map', 'Profile P–T', etc.
+    """
+    if meta is None:
+        return kind
+
+    header = f"{meta['species']} ({meta['units']}) at {meta['time_str']}"
+    if kind:
+        header = f"{kind} | " + header
+
+    line2 = (
+        f"Station {meta['station_name']}: "
+        f"({meta['station_lat']:.2f}, {meta['station_lon']:.2f}), alt={meta['station_alt']:.1f} m"
+    )
+    line3 = (
+        f"Model: ({meta['model_lat']:.2f}, {meta['model_lon']:.2f}), "
+        f"lev={meta['model_level']}, alt={meta['z_level_m']:.1f} m"
+    )
+    return header + "\n" + line2 + "\n" + line3
+
+
 def plot_variable_on_map(
     lats_small,
     lons_small,
@@ -145,33 +167,7 @@ def plot_variable_on_map(
 # Optional: nicer label styling
     gl.xlabel_style = {"size": 9}
     gl.ylabel_style = {"size": 9}
-    if meta is None:
-        title = f"{species_name} ({units})"
-        if time_str is not None:
-          title += f" at {time_str}"
-    else:
-        title = (
-        f"{meta['species']} ({meta['units']}) at {meta['time_str']}\n"
-        f"Station {meta['station_name']}: "
-        f"({meta['station_lat']:.2f}, {meta['station_lon']:.2f}), alt={meta['station_alt']:.1f} m | "
-        f"Model: ({meta['model_lat']:.2f}, {meta['model_lon']:.2f}), "
-        f"Lev={meta['model_level']}, Alt={meta['z_level_m']:.1f} m"
-    )
-    ax.set_title(title)
-
-    '''if units:
-        base_title = f"{species_name} ({units})"
-    else:
-        base_title = species_name
-
-    if time_str is not None:
-        title = f"{base_title} at {time_str}"
-    else:
-        title = base_title
-
-    ax.set_title(title)
-
-    '''
+    ax.set_title(build_meta_title(meta, kind="Map with Station"),pad=18)
     return fig, ax, im
 
 
@@ -251,19 +247,7 @@ def plot_rectangles(
     # Colorbar and title
     #plt.colorbar(im, ax=ax, pad=0.02, label=units)
     # Title consistent with map
-    if meta is None:
-        title = f"{species_name} ({units})"
-        if time_str is not None:
-          title += f" at {time_str}"
-    else:
-        title = (
-        f"{meta['species']} ({meta['units']}) at {meta['time_str']}\n"
-        f"Station {meta['station_name']}: "
-        f"({meta['station_lat']:.2f}, {meta['station_lon']:.2f}), alt={meta['station_alt']:.1f} m | "
-        f"Model: ({meta['model_lat']:.2f}, {meta['model_lon']:.2f}), "
-        f"Lev={meta['model_level']}, Alt={meta['z_level_m']:.1f} m"
-    )
-    ax.set_title(title)
+    ax.set_title(build_meta_title(meta, kind="Map with Sectors"), pad=18)
     
     return ax,im
 
@@ -295,7 +279,7 @@ def _sort_by_pressure_with_index(p_hPa, idx_level, *arrays):
     return (p_sorted, *sorted_arrays, idx_sorted)
 
 def plot_profile_P_T(p_prof_Pa, T_prof_K, idx_level,
-                     time_str=None, ax=None):
+                     time_str=None, ax=None,meta=None):
     """
     Plot vertical profile: Pressure (hPa) vs Temperature (°C)
     for a single grid cell, with a red dot at idx_level.
@@ -332,11 +316,7 @@ def plot_profile_P_T(p_prof_Pa, T_prof_K, idx_level,
 
     ax.set_xlabel("Temperature (°C)")
     ax.set_ylabel("Pressure (hPa)")
-    title = "Vertical profile: P–T"
-    if time_str is not None:
-        title += f" at {time_str}"
-    ax.set_title(title)
-
+    ax.set_title(build_meta_title(meta, kind="Profile T-P"))
     ax.invert_yaxis()
     ax.grid(True, linestyle="--", alpha=0.5)
     ax.legend(loc="best")
@@ -344,7 +324,7 @@ def plot_profile_P_T(p_prof_Pa, T_prof_K, idx_level,
     return fig, ax
 
 def plot_profile_T_Z(T_prof_K, z_prof_m, idx_level,
-                     time_str=None, z_units="km", ax=None):
+                     time_str=None, z_units="km", ax=None,meta=None):
     """
     Plot vertical profile: Temperature (°C) vs Height (Z),
     with red dot at idx_level.
@@ -387,11 +367,7 @@ def plot_profile_T_Z(T_prof_K, z_prof_m, idx_level,
 
     ax.set_xlabel("Temperature (°C)")
     ax.set_ylabel(ylabel)
-    title = "Vertical profile: T–Z"
-    if time_str is not None:
-        title += f" at {time_str}"
-    ax.set_title(title)
-
+    ax.set_title(build_meta_title(meta, kind="Profile T–Z"))
     ax.grid(True, linestyle="--", alpha=0.5)
     ax.legend(loc="best")
 
@@ -430,21 +406,7 @@ def plot_profile_T_logP(p_prof_Pa, T_prof_K, idx_level, time_str=None, ax=None,m
     ax.set_xlabel("Temperature (°C)")
     ax.set_ylabel("Pressure (hPa)")
 
-    title = "Vertical profile: T–P"
-    if meta is None:
-        title = f"{title}"
-        if time_str is not None:
-          title += f" at {time_str}"
-    else:
-        title = (
-        f"{title}"    
-        f"{meta['species']} ({meta['units']}) at {meta['time_str']}\n"
-        f"Station {meta['station_name']}: "
-        f"({meta['station_lat']:.2f}, {meta['station_lon']:.2f}), alt={meta['station_alt']:.1f} m | "
-        f"Model: ({meta['model_lat']:.2f}, {meta['model_lon']:.2f}), "
-        f"Lev={meta['model_level']}, Alt={meta['z_level_m']:.1f} m"
-    )
-    ax.set_title(title)
+    ax.set_title(build_meta_title(meta, kind="Profile T–logP"))
 
     ax.grid(True, which="both", linestyle="--", alpha=0.5)
     ax.legend(loc="best")
@@ -453,7 +415,7 @@ def plot_profile_T_logP(p_prof_Pa, T_prof_K, idx_level, time_str=None, ax=None,m
 
 def plot_profile_species_logP(p_prof_Pa, species_prof, idx_level,
                               species_name="species", species_units="",
-                              time_str=None, ax=None):
+                              time_str=None, ax=None,meta=None):
     """
     Species vs Pressure with log-pressure vertical axis (ticks labeled in hPa).
     Red dot indicates the selected model level.
@@ -487,11 +449,9 @@ def plot_profile_species_logP(p_prof_Pa, species_prof, idx_level,
         xlabel += f" ({species_units})"
     ax.set_xlabel(xlabel)
     ax.set_ylabel("Pressure (hPa)")
+    
+    ax.set_title(build_meta_title(meta, kind=f"Profile{species_name} -Pressure"))
 
-    title = f"{species_name}–P"
-    if time_str is not None:
-        title += f" at {time_str}"
-    ax.set_title(title)
 
     ax.grid(True, which="both", linestyle="--", alpha=0.5)
     ax.legend(loc="best")
@@ -500,7 +460,7 @@ def plot_profile_species_logP(p_prof_Pa, species_prof, idx_level,
 
 def plot_profile_species_Z(z_prof_m, species_prof, idx_level,
                            species_name="species", species_units="",
-                           time_str=None, z_units="km", ax=None):
+                           time_str=None, z_units="km", ax=None,meta=None):
     """
     Plot vertical profile: species vs Height (Z),
     with red dot at idx_level.
@@ -550,10 +510,8 @@ def plot_profile_species_Z(z_prof_m, species_prof, idx_level,
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
 
-    title = f"{species_name}–Z"
-    if time_str is not None:
-        title += f" at {time_str}"
-    ax.set_title(title)
+    ax.set_title(build_meta_title(meta, kind="Profile concentration-Height"))
+
 
     ax.grid(True, linestyle="--", alpha=0.5)
     ax.legend(loc="best")
