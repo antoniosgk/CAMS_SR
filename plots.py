@@ -11,6 +11,8 @@ import cartopy.feature as cfeature
 import cartopy.io.img_tiles as cimgt
 import os
 import re
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
 
 def _sanitize_filename(s: str) -> str:
     # keep it filesystem-safe
@@ -52,7 +54,7 @@ def build_meta_title(meta, kind=""):
 
 
 def plot_variable_on_map(
-    # species grid
+    # species grid (always 1D)
     lats_small,
     lons_small,
     data_arr,
@@ -68,15 +70,17 @@ def plot_variable_on_map(
     d=0.4,
     proj=None,
     ax=None,
-    # terrain background on a DIFFERENT grid
+    # terrain background on a DIFFERENT grid (always 1D)
     lats_terrain=None,
     lons_terrain=None,
     z_orog_m=None,
-    terrain_alpha=0.45,
+    terrain_alpha=0.25,
     field_alpha=0.65,
     add_orog_contours=True,
 ):
+    
 
+    # --- Projection / axes (must be GeoAxes) ---
     if proj is None:
         proj = ccrs.PlateCarree()
 
@@ -85,67 +89,79 @@ def plot_variable_on_map(
     else:
         fig = ax.figure
 
-    # extent around station
+    # --- extent around station (lon/lat degrees => PlateCarree) ---
     lon_min, lon_max = lon_s - d, lon_s + d
     lat_min, lat_max = lat_s - d, lat_s + d
-    ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=proj)
+    ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
 
-    # 1D only (as per your setup)
-    lats_small = np.asarray(lats_small, dtype=float)
-    lons_small = np.asarray(lons_small, dtype=float)
-    #LON2D, LAT2D = np.meshgrid(lons_small, lats_small)
+    # --- ocean background first (so masked sea shows this color) ---
+    ax.add_feature(cfeature.OCEAN, facecolor="lightblue", zorder=-2)
 
-    # -----------------------------
-    # TERRAIN UNDERLAY (PHIS-based)
-    # -----------------------------
-    # --- terrain first (covers d_zoom) ---
+    # --- TERRAIN underlay (optional) ---
+    terrain_im = None
     if (z_orog_m is not None) and (lats_terrain is not None) and (lons_terrain is not None):
-      LON_T, LAT_T = np.meshgrid(lons_terrain, lats_terrain)
-      zmin = np.nanmin(z_orog_m)
-      zmax = np.nanmax(z_orog_m)
+        lats_terrain = np.asarray(lats_terrain, dtype=float)
+        lons_terrain = np.asarray(lons_terrain, dtype=float)
+        z_orog_m = np.asarray(z_orog_m, dtype=float)
 
-      ax.pcolormesh(
-        LON_T, LAT_T, z_orog_m,
-        cmap="terrain",
-        shading="auto",
-        vmin=zmin, vmax=zmax,
-        alpha=terrain_alpha,
-        transform=ccrs.PlateCarree(),
-        zorder=0,
-    )
+        LON_T, LAT_T = np.meshgrid(lons_terrain, lats_terrain)
 
-      if add_orog_contours:
-          levels = np.arange(np.floor(zmin/200)*200, np.ceil(zmax/200)*200 + 1, 200)
-          ax.contour(
-            LON_T, LAT_T, z_orog_m,
-            levels=levels,
-            colors="k",
-            linewidths=0.4,
-            alpha=0.35,
+        # Mask sea so it doesn't use the terrain colormap
+        z_plot = np.ma.masked_where(~np.isfinite(z_orog_m) | (z_orog_m <= 0.0), z_orog_m)
+
+        # Use land-only min/max for better contrast (avoid sea pulling vmin down)
+        if np.ma.is_masked(z_plot):
+            zmin = float(z_plot.min())
+            zmax = float(z_plot.max())
+        else:
+            zmin = float(np.nanmin(z_orog_m))
+            zmax = float(np.nanmax(z_orog_m))
+
+        terrain_im = ax.pcolormesh(
+            LON_T, LAT_T, z_plot,
+            cmap="terrain",
+            shading="auto",
+            vmin=zmin, vmax=zmax,
+            alpha=terrain_alpha,
             transform=ccrs.PlateCarree(),
-            zorder=1,
+            zorder=-1,
         )
 
-    # Features (keep light, terrain is already drawn)
-    ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=2)
-    ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=2)
+        if add_orog_contours:
+            step_m = 200.0
+            levels = np.arange(np.floor(zmin / step_m) * step_m,
+                               np.ceil(zmax / step_m) * step_m + step_m,
+                               step_m)
+            ax.contour(
+                LON_T, LAT_T, z_orog_m,
+                levels=levels,
+                colors="k",
+                linewidths=0.4,
+                alpha=0.30,
+                transform=ccrs.PlateCarree(),
+                zorder=0,
+            )
 
-    # -----------------------------
-    # DATA FIELD OVERLAY
-    # -----------------------------
-    vmin = np.nanmin(data_arr)
-    vmax = np.nanmax(data_arr)
-    norm = Normalize(vmin=vmin, vmax=vmax)
+    # --- Species overlay (small domain) ---
+    lats_small = np.asarray(lats_small, dtype=float)
+    lons_small = np.asarray(lons_small, dtype=float)
+    data_arr = np.asarray(data_arr, dtype=float)
+
     LON_S, LAT_S = np.meshgrid(lons_small, lats_small)
+
+    vmin = float(np.nanmin(data_arr))
+    vmax = float(np.nanmax(data_arr))
+    norm = Normalize(vmin=vmin, vmax=vmax)
+
     im = ax.pcolormesh(
-     LON_S, LAT_S, data_arr,
-     cmap="viridis",
-     shading="auto",
-     norm=norm,
-     transform=ccrs.PlateCarree(),
-     alpha=field_alpha,
-     zorder=2,
-)
+        LON_S, LAT_S, data_arr,
+        cmap="viridis",
+        shading="auto",
+        norm=norm,
+        transform=ccrs.PlateCarree(),
+        alpha=field_alpha,
+        zorder=2,
+    )
 
     # station marker
     ax.plot(
@@ -155,9 +171,25 @@ def plot_variable_on_map(
         zorder=4,
     )
 
-    # Colorbar (leave it here; don't add another in plot_rectangles)
-    cb = plt.colorbar(im, ax=ax, pad=0.02)
-    cb.set_label(units)
+    # coast/borders on top
+    ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=5)
+    ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=5)
+
+    # --- Two colorbars (terrain left, species right) ---
+    cb_w=0.02
+    cb_h=0.60
+    cb_y=0.18
+    #left colorbar(terrain)
+    if terrain_im is not None:
+        cax_terr=fig.add_axes([0.01,cb_y,cb_w,cb_h])
+        cb_terr=fig.colorbar(terrain_im,cax=cax_terr)
+        cb_terr.set_label("Elevation (m)")
+
+    #right colorbar (species)
+    cax_sp=fig.add_axes([0.8,cb_y,cb_w,cb_h])
+    cb_sp=fig.colorbar(im,cax=cax_sp)
+    cb_sp.set_label(units)    
+
 
     # -----------------------------
     # Gridlines with DMS labels
@@ -189,7 +221,7 @@ def plot_variable_on_map(
     gl.ylabel_style = {"size": 9}
 
     ax.set_title(build_meta_title(meta, kind="Map with Station"), pad=18)
-    fig.subplots_adjust(top=0.82)  # keep title readable
+    fig.subplots_adjust(left=0.1,right=0.9,top=0.82,bottom=0.1)  # keep title readable
 
     return fig, ax, im
 
@@ -205,8 +237,16 @@ def plot_rectangles(
     time_str=None,
     meta=None,
 ):
+    import numpy as np
+    import cartopy.crs as ccrs
+    from matplotlib.patches import Rectangle
+
     lats_small = np.asarray(lats_small, dtype=float)
     lons_small = np.asarray(lons_small, dtype=float)
+
+    # safety (optional but helpful)
+    if not (0 <= ii < len(lats_small) and 0 <= jj < len(lons_small)):
+        raise IndexError(f"(ii,jj)=({ii},{jj}) out of bounds for lats/lons small.")
 
     dlon = float(np.abs(lons_small[1] - lons_small[0]))
     dlat = float(np.abs(lats_small[1] - lats_small[0]))
@@ -217,8 +257,8 @@ def plot_rectangles(
     sizes = {"S1": 1, "S2": 2, "S3": 3}
     rect_styles = {
         "S1": {"edgecolor": "black", "linewidth": 2},
-        "S2": {"edgecolor": "red", "linewidth": 2},
-        "S3": {"edgecolor": "blue", "linewidth": 2},
+        "S2": {"edgecolor": "red",   "linewidth": 2},
+        "S3": {"edgecolor": "blue",  "linewidth": 2},
     }
 
     for name, r in sizes.items():
@@ -233,14 +273,17 @@ def plot_rectangles(
             height,
             facecolor="none",
             transform=ccrs.PlateCarree(),
+            zorder=10,                 # <-- key: always on top
             **rect_styles[name],
         )
         ax.add_patch(rect)
 
-    ax.set_title(build_meta_title(meta, kind="Map with Sectors"), pad=18)
-    ax.figure.subplots_adjust(top=0.82)
+    if meta is not None:
+        ax.set_title(build_meta_title(meta, kind="Map with Sectors"), pad=18)
+        ax.figure.subplots_adjust(top=0.82)
 
     return ax, im
+
 
 '''
 
