@@ -28,7 +28,7 @@ and their physical interpretation
 idx:index of the station of the stations file
 name:name of the station of the stations file
 cell_nums:number of cells around the central grid cell(the one the station falls into)
-that will be plotted
+that will be plotted lll
 lat_s
 """
 #%%
