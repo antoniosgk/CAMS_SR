@@ -8,7 +8,6 @@ import xarray as xr
 import matplotlib.pyplot as plt
 from metpy.constants import g 
 from metpy.units import units as mp_units
-
 # main.py
 #%%
 from vertical_indexing import metpy_find_level_index,metpy_compute_heights
@@ -34,10 +33,10 @@ lat_s
 """
 #%%
 def main():
-    idx=2 #index of station of the stations_file
+    idx=3 #index of station of the stations_file
     name=None #name of the station
     cell_nums = 4 #numb of cells that will plotted n**2
-    d_zoom=0.8 #zoom of plots
+    d_zoom=5.0 #zoom of plots
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
     #-----------
     stations = load_stations(stations_path)
@@ -67,33 +66,29 @@ def main():
     else:
         Ny, Nx = lats.shape
 
-    i1, i2 = max(0, i-cell_nums), min(Ny-1, i+cell_nums) #subsets of lats (for plotting)
-    j1, j2 = max(0, j-cell_nums), min(Nx-1, j+cell_nums) #subset of lons (for plotting)
+    #i1, i2 = max(0, i-cell_nums), min(Ny-1, i+cell_nums) #subsets of lats (for plotting)
+    #j1, j2 = max(0, j-cell_nums), min(Nx-1, j+cell_nums) #subset of lons (for plotting)
 
-    print(f"\nLoading domain subset: i={i1}:{i2}, j={j1}:{j2} for plotting")
-    
+    #print(f"\nLoading domain subset: i={i1}:{i2}, j={j1}:{j2} for plotting")
+    # --- SMALL box (species) ---
+    i1_s, i2_s = max(0, i - cell_nums), min(Ny - 1, i + cell_nums)
+    j1_s, j2_s = max(0, j - cell_nums), min(Nx - 1, j + cell_nums)
+
+    print(f"\nLoading domain subset: i={i1_s}:{i2_s}, j={j1_s}:{j2_s} for plotting")
+    ds_small = ds_species.isel(lat=slice(i1_s, i2_s + 1), lon=slice(j1_s, j2_s + 1))
+    lats_small = lats[i1_s:i2_s + 1]
+    lons_small = lons[j1_s:j2_s + 1]
+
+    ii = i - i1_s
+    jj = j - j1_s
+
     ds_big = ds_species #a copy of ds_species,maybe not needed,to reevalutate
 
     # Coordinates
     lats_big = ds_big['lat'].values
     lons_big = ds_big['lon'].values
 
-# --- CASE 1: 1D lat/lon ---
-    if lats_big.ndim == 1 and lons_big.ndim == 1:
 
-        ds_small = ds_big.isel({'lat': slice(i1, i2+1),
-                            'lon': slice(j1, j2+1)})
-
-        lats_small = lats_big[i1:i2+1]
-        lons_small = lons_big[j1:j2+1]
-
-# --- CASE 2: 2D lat/lon ---
-    else:
-       ds_small = ds_big.isel({'lat': slice(i1, i2+1),
-                            'lon': slice(j1, j2+1)})
-
-       lats_small = lats_big[i1:i2+1, j1:j2+1]
-       lons_small = lons_big[i1:i2+1, j1:j2+1]
 
 # variable extraction
     var_name = species
@@ -103,8 +98,8 @@ def main():
     #ds_big.close()
     #del ds_big
 # local (station) indices in the small box
-    ii = i - i1
-    jj = j - j1
+    ii = i - i1_s
+    jj = j - j1_s
 
     # ---- Orography: PHIS / SGH diagnostics and surface height ----
     PHIS_field = ds_orog["PHIS"] #surface geopotential height
@@ -139,14 +134,23 @@ def main():
     species_prof= ds_species[species].values[0,:,i,j] #here i must put species or var!!!
     RH_prof = ds_RH['RH'].values[0,:,i,j]
     # PHIS_small aligned to ds_small domain
-    PHIS_small = ds_orog["PHIS"].isel(
-    time=0,
-    lat=slice(i1, i2+1),
-    lon=slice(j1, j2+1)
-    ).values
+    # --- LARGE box (terrain background) ---
+    dlat = float(np.abs(lats[1] - lats[0]))
+    dlon = float(np.abs(lons[1] - lons[0]))
 
-# Convert geopotential (m^2/s^2) -> height (m)
-    z_orog = PHIS_small / 9.80665
+    cell_nums_lat = int(np.ceil(d_zoom / dlat))
+    cell_nums_lon = int(np.ceil(d_zoom / dlon))
+    cell_nums_bg = max(cell_nums_lat, cell_nums_lon)
+
+    i1_bg, i2_bg = max(0, i - cell_nums_bg), min(Ny - 1, i + cell_nums_bg)
+    j1_bg, j2_bg = max(0, j - cell_nums_bg), min(Nx - 1, j + cell_nums_bg)
+
+    PHIS_bg = ds_orog["PHIS"].isel(time=0, lat=slice(i1_bg, i2_bg + 1), lon=slice(j1_bg, j2_bg + 1)).values
+    z_orog_bg = PHIS_bg / 9.80665
+
+    lats_bg = lats[i1_bg:i2_bg + 1]
+    lons_bg = lons[j1_bg:j2_bg + 1]
+
 
     #T_prof = ds_T["T"].isel(time=0, lat=i, lon=j).values   #see if it is better this
     #p_prof = ds_PL["PL"].isel(time=0, lat=i, lon=j).values #or the above
@@ -244,97 +248,38 @@ def main():
     meta["units"] = units_ppb
     #--------------
     fig1, ax1, im1 = plot_variable_on_map(
-    lats_small,
-    lons_small,
-    data_arr_ppb,
-    lon_s,
-    lat_s,
+    lats_small, lons_small, data_arr_ppb,
+    lon_s, lat_s,
     units=units_ppb,
     species_name=species,
     d=d_zoom,
     time_str=time_str,
-    meta=meta
-    )
-    '''
-    fig1, ax1, im1 = plot_variable_on_map(lats_small,
-    lons_small,
-    data_arr_ppb,
-    lon_s,
-    lat_s,
-    units=units_ppb,
-    species_name=species,
-    d=d_zoom,
-    time_str=time_str,
-    meta=meta, z_orog_m=z_orog, backend="cartopy")
-    plt.colorbar(im1, ax=ax1, pad=0.02, label=meta["units"])
-    plt.show()
+    meta=meta,
+    z_orog_m=z_orog_bg,          
+    lats_terrain=lats_bg,
+    lons_terrain=lons_bg,
+    add_orog_contours=False,
+)
 
-    fig2, ax2, im2 = plot_variable_on_map(lats_small,
-    lons_small,
-    data_arr_ppb,
-    lon_s,
-    lat_s,
-    units=units_ppb,
-    species_name=species,
-    d=d_zoom,
-    time_str=time_str,
-    meta=meta, z_orog_m=z_orog, backend="cartopy")
-    plot_rectangles(ax2, lats_small, lons_small, ii, jj, im=im2, meta=meta, backend="cartopy")
-    plt.show()
-
-    '''
+    
 
     fig2, ax2, im2 = plot_variable_on_map(
-    lats_small,
-    lons_small,
-    data_arr_ppb,
-    lon_s,
-    lat_s,
+    lats_small, lons_small, data_arr_ppb,
+    lon_s, lat_s,
     units=units_ppb,
     species_name=species,
     d=d_zoom,
     time_str=time_str,
-    meta=meta
-    )
+    meta=meta,
+    z_orog_m=z_orog_bg,
+    lats_terrain=lats_bg,
+    lons_terrain=lons_bg
+)
+    plot_rectangles(ax2, lats_small, lons_small, ii, jj, im2, meta=meta)
+    plt.show()
 
-    plot_rectangles(
-    ax2,
-    lats_small,
-    lons_small,
-    ii,
-    jj,
-    im2,
-    units=units,
-    species_name=species,
-    time_str=time_str,
-    meta=meta
-    )
-    '''
-    m1, _, _ = plot_variable_on_map(lats_small,
-    lons_small,
-    data_arr,
-    lon_s,
-    lat_s,
-    units=units,
-    species_name=species,
-    d=d_zoom,
-    time_str=time_str,
-    meta=meta, backend="folium")
-    m1.save("map_terrain.html")
-
-    m2, _, _ = plot_variable_on_map(lats_small,
-    lons_small,
-    data_arr,
-    lon_s,
-    lat_s,
-    units=units,
-    species_name=species,
-    d=d_zoom,
-    time_str=time_str,
-    meta=meta, backend="folium")
-    plot_rectangles(m2, lats_small, lons_small, ii, jj, backend="folium")
-    m2.save("map_terrain_with_sectors.html")
-    '''
+    
+    
     # P–T
     fig_PT, ax_PT = plot_profile_P_T(p_prof, T_prof, idx_level, time_str=time_str,meta=meta)
     plt.show()
@@ -371,7 +316,7 @@ def main():
 )
 
     plt.show()
-    
+    """
     save_figure(fig1, out_dir, f"map_{species}_{name}_{time_str}")
     save_figure(fig2, out_dir, f"map_with sectors_{species}_{name}_{time_str}")
     save_figure(fig_PT, out_dir, f"map_P_T_{time_str}")
@@ -379,6 +324,8 @@ def main():
     save_figure(fig_SlogP, out_dir, f"map_S_lnP_{species}_{name}_{time_str}")
     save_figure(fig_SZ, out_dir, f"map_S-Z{species}_{name}_{time_str}")
     save_figure(fig_TZ, out_dir, f"map_T-Z{species}_{name}_{time_str}")
+    """
+    #print(f"\nTotal execution time: {time.perf_counter()-t_start:.1f} s")
     
 
 

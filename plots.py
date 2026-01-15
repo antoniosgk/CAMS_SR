@@ -52,32 +52,31 @@ def build_meta_title(meta, kind=""):
 
 
 def plot_variable_on_map(
+    # species grid
     lats_small,
     lons_small,
     data_arr,
+    # station
     lon_s,
     lat_s,
+    # labels/meta
     units="",
     species_name="var",
+    time_str=None,
+    meta=None,
+    # map control
+    d=0.4,
     proj=None,
     ax=None,
-    d=5,
-    time_str=None,
-    meta=None
+    # terrain background on a DIFFERENT grid
+    lats_terrain=None,
+    lons_terrain=None,
+    z_orog_m=None,
+    terrain_alpha=0.45,
+    field_alpha=0.65,
+    add_orog_contours=True,
 ):
-    """
-    Plot a 2D variable (data_arr) on a map around a station.
 
-    lats_small, lons_small: 1D or 2D lat/lon arrays matching data_arr
-    data_arr              : 2D array (Ny, Nx)
-    lon_s, lat_s          : station longitude/latitude
-    units                 : string for colorbar label
-    species_name          : used in title
-    proj                  : cartopy CRS (defaults to PlateCarree)
-    ax                    : existing GeoAxes (optional)
-    d                     : half-width of domain in degrees around station
-    time_str              : optional time string for time
-    """
     if proj is None:
         proj = ccrs.PlateCarree()
 
@@ -86,58 +85,84 @@ def plot_variable_on_map(
     else:
         fig = ax.figure
 
-    # Map extent around station
+    # extent around station
     lon_min, lon_max = lon_s - d, lon_s + d
     lat_min, lat_max = lat_s - d, lat_s + d
     ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=proj)
-    #ax.add_feature(cfeature.ShadedRelief(), zorder=0)
-    #ax.stock_img() # background topography-like
-    #ax.set_xticks(xticks, crs=proj)
-    #ax.set_yticks(yticks, crs=proj)
 
-    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter("{x:.1f}"))
-    ax.yaxis.set_major_formatter(ticker.StrMethodFormatter("{x:.1f}"))
-    # Lon/lat grids
-    if lats_small.ndim == 1 and lons_small.ndim == 1:
-        LON2D, LAT2D = np.meshgrid(lons_small, lats_small)
-    else:
-        LAT2D = lats_small
-        LON2D = lons_small
+    # 1D only (as per your setup)
+    lats_small = np.asarray(lats_small, dtype=float)
+    lons_small = np.asarray(lons_small, dtype=float)
+    #LON2D, LAT2D = np.meshgrid(lons_small, lats_small)
 
-    # Color limits
+    # -----------------------------
+    # TERRAIN UNDERLAY (PHIS-based)
+    # -----------------------------
+    # --- terrain first (covers d_zoom) ---
+    if (z_orog_m is not None) and (lats_terrain is not None) and (lons_terrain is not None):
+      LON_T, LAT_T = np.meshgrid(lons_terrain, lats_terrain)
+      zmin = np.nanmin(z_orog_m)
+      zmax = np.nanmax(z_orog_m)
+
+      ax.pcolormesh(
+        LON_T, LAT_T, z_orog_m,
+        cmap="terrain",
+        shading="auto",
+        vmin=zmin, vmax=zmax,
+        alpha=terrain_alpha,
+        transform=ccrs.PlateCarree(),
+        zorder=0,
+    )
+
+      if add_orog_contours:
+          levels = np.arange(np.floor(zmin/200)*200, np.ceil(zmax/200)*200 + 1, 200)
+          ax.contour(
+            LON_T, LAT_T, z_orog_m,
+            levels=levels,
+            colors="k",
+            linewidths=0.4,
+            alpha=0.35,
+            transform=ccrs.PlateCarree(),
+            zorder=1,
+        )
+
+    # Features (keep light, terrain is already drawn)
+    ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=2)
+    ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=2)
+
+    # -----------------------------
+    # DATA FIELD OVERLAY
+    # -----------------------------
     vmin = np.nanmin(data_arr)
     vmax = np.nanmax(data_arr)
     norm = Normalize(vmin=vmin, vmax=vmax)
-
-    # Main pcolormesh
+    LON_S, LAT_S = np.meshgrid(lons_small, lats_small)
     im = ax.pcolormesh(
-        LON2D,
-        LAT2D,
-        data_arr,
-        cmap="viridis",
-        shading="auto",
-        norm=norm,
-        transform=ccrs.PlateCarree(),alpha=0.6,zorder=2
-    )
+     LON_S, LAT_S, data_arr,
+     cmap="viridis",
+     shading="auto",
+     norm=norm,
+     transform=ccrs.PlateCarree(),
+     alpha=field_alpha,
+     zorder=2,
+)
 
-    # Station marker
+    # station marker
     ax.plot(
-        lon_s,
-        lat_s,
-        "kx",
+        lon_s, lat_s, "kx",
         markersize=12,
         transform=ccrs.PlateCarree(),
+        zorder=4,
     )
 
-    # Features
-    ax.add_feature(cfeature.LAND, facecolor="lightgray", zorder=0)
-    ax.add_feature(cfeature.OCEAN, facecolor="white", zorder=0)
-    ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=0)
-    ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
-    plt.colorbar(im, ax=ax, pad=0.02, label=units)
-    step = 0.4  # degrees
+    # Colorbar (leave it here; don't add another in plot_rectangles)
+    cb = plt.colorbar(im, ax=ax, pad=0.02)
+    cb.set_label(units)
 
-    # Build tick values aligned to step
+    # -----------------------------
+    # Gridlines with DMS labels
+    # -----------------------------
+    step = 0.4  # degrees
     lon0 = np.floor(lon_min / step) * step
     lon1 = np.ceil(lon_max / step) * step
     lat0 = np.floor(lat_min / step) * step
@@ -147,29 +172,26 @@ def plot_variable_on_map(
     yticks = np.round(np.arange(lat0, lat1 + 0.5 * step, step), 6)
 
     gl = ax.gridlines(
-     crs=ccrs.PlateCarree(),
-     draw_labels=True,
-     linewidth=0,
-     alpha=0.01,          
-     linestyle="--",
-     zorder=5,
+        crs=ccrs.PlateCarree(),
+        draw_labels=True,
+        linewidth=0.6,
+        alpha=0.35,
+        linestyle="--",
+        zorder=5,
     )
-
     gl.top_labels = False
     gl.right_labels = False
-
     gl.xlocator = ticker.FixedLocator(xticks)
     gl.ylocator = ticker.FixedLocator(yticks)
-
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
-
-# Optional: nicer label styling
     gl.xlabel_style = {"size": 9}
     gl.ylabel_style = {"size": 9}
-    ax.set_title(build_meta_title(meta, kind="Map with Station"),pad=18)
-    return fig, ax, im
 
+    ax.set_title(build_meta_title(meta, kind="Map with Station"), pad=18)
+    fig.subplots_adjust(top=0.82)  # keep title readable
+
+    return fig, ax, im
 
 def plot_rectangles(
     ax,
@@ -180,53 +202,24 @@ def plot_rectangles(
     im,
     units="",
     species_name="var",
-    time_str= None,
-    meta=None
+    time_str=None,
+    meta=None,
 ):
-    """
-    Plot the 3 sector rectangles (S1, S2, S3) around the central grid cell (ii, jj)
-    on an existing map, and add colorbar + title.
+    lats_small = np.asarray(lats_small, dtype=float)
+    lons_small = np.asarray(lons_small, dtype=float)
 
-    ax         : GeoAxes used in plot_variable_on_map
-    lats_small : 1D or 2D lat array
-    lons_small : 1D or 2D lon array
-    ii, jj     : indices of the central grid cell in the small domain
-    im         : mappable from pcolormesh (for colorbar)
-    units      : colorbar label
-    species_name: used in plot title
-    """
-    # Grid spacing in degrees
-    if lons_small.ndim == 1:
-        dlon = float(np.abs(lons_small[1] - lons_small[0]))
-    else:
-        dlon = float(np.abs(lons_small[0, 1] - lons_small[0, 0]))
+    dlon = float(np.abs(lons_small[1] - lons_small[0]))
+    dlat = float(np.abs(lats_small[1] - lats_small[0]))
 
-    if lats_small.ndim == 1:
-        dlat = float(np.abs(lats_small[1] - lats_small[0]))
-    else:
-        dlat = float(np.abs(lats_small[1, 0] - lats_small[0, 0]))
+    cx = float(lons_small[jj])
+    cy = float(lats_small[ii])
 
-    # Sector sizes (radius in grid cells)
-    sizes = {
-        "S1": 1,  # 3x3
-        "S2": 2,  # 5x5
-        "S3": 3,  # 7x7
-    }
-
-    # Colors and linewidths
+    sizes = {"S1": 1, "S2": 2, "S3": 3}
     rect_styles = {
         "S1": {"edgecolor": "black", "linewidth": 2},
         "S2": {"edgecolor": "red", "linewidth": 2},
         "S3": {"edgecolor": "blue", "linewidth": 2},
     }
-
-    # Center of rectangles
-    if lons_small.ndim == 1 and lats_small.ndim == 1:
-        cx = float(lons_small[jj])
-        cy = float(lats_small[ii])
-    else:
-        cx = float(lons_small[ii, jj])
-        cy = float(lats_small[ii, jj])
 
     for name, r in sizes.items():
         width = (2 * r + 1) * dlon
@@ -244,14 +237,10 @@ def plot_rectangles(
         )
         ax.add_patch(rect)
 
-    # Colorbar and title
-    #plt.colorbar(im, ax=ax, pad=0.02, label=units)
-    # Title consistent with map
     ax.set_title(build_meta_title(meta, kind="Map with Sectors"), pad=18)
-    
-    return ax,im
+    ax.figure.subplots_adjust(top=0.82)
 
-
+    return ax, im
 
 '''
 
