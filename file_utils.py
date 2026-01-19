@@ -4,7 +4,7 @@ the species,the temperature and the pressure
 '''
 import pathlib
 stations_path = "/home/agkiokas/CAMS/CHINESE_STATIONS_INFO_2015_2023.txt"  # your stations table
-base_path = "/mnt/store01/agkiokas/CAMS/inst"
+base_path = "/mnt/store01/agkiokas/CAMS/inst/subsets"
 
 # species and dataset naming convention
 product = "inst3d"     # filename prefix,depends on the name of the file saved
@@ -21,8 +21,8 @@ pl_file = pathlib.Path(f"{base_path}/PL/{product}_PL_{date}_{time}.nc4")
 # Path construction for Temperature file
 T_file = pathlib.Path(f"{base_path}/T/{product}_T_{date}_{time}.nc4")
 
-#Orography file
-orog_file="/mnt/store01/agkiokas/CAMS/inst/const/file.nc"
+# Path construction for orography file 
+orog_file=pathlib.Path(f"{base_path}/const/const_2d_asm_Nx_{date}.nc4")
 
-#Relative Humidity file
+# Path construction for Relative Humidity file
 RH_file=pathlib.Path(f"{base_path}/RH/{product}_RH_{date}_{time}.nc4")

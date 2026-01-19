@@ -74,9 +74,10 @@ def plot_variable_on_map(
     lats_terrain=None,
     lons_terrain=None,
     z_orog_m=None,
-    terrain_alpha=0.25,
-    field_alpha=0.65,
+    terrain_alpha=0.1,
+    field_alpha=0.85,
     add_orog_contours=True,
+    plot_species=True
 ):
     
 
@@ -147,13 +148,16 @@ def plot_variable_on_map(
     lons_small = np.asarray(lons_small, dtype=float)
     data_arr = np.asarray(data_arr, dtype=float)
 
-    LON_S, LAT_S = np.meshgrid(lons_small, lats_small)
+    
 
     vmin = float(np.nanmin(data_arr))
     vmax = float(np.nanmax(data_arr))
     norm = Normalize(vmin=vmin, vmax=vmax)
 
-    im = ax.pcolormesh(
+    im = None
+    if plot_species:
+      LON_S, LAT_S = np.meshgrid(lons_small, lats_small)
+      im = ax.pcolormesh(
         LON_S, LAT_S, data_arr,
         cmap="viridis",
         shading="auto",
@@ -162,6 +166,7 @@ def plot_variable_on_map(
         alpha=field_alpha,
         zorder=2,
     )
+
 
     # station marker
     ax.plot(
@@ -186,9 +191,19 @@ def plot_variable_on_map(
         cb_terr.set_label("Elevation (m)")
 
     #right colorbar (species)
-    cax_sp=fig.add_axes([0.8,cb_y,cb_w,cb_h])
-    cb_sp=fig.colorbar(im,cax=cax_sp)
-    cb_sp.set_label(units)    
+    if plot_species:
+      cax_sp=fig.add_axes([0.8,cb_y,cb_w,cb_h])
+      cb_sp=fig.colorbar(im,cax=cax_sp)
+      cb_sp.set_label(units)    
+    
+    if not plot_species and meta is not None:
+      ax.set_title(
+        f"Station {meta['station_name']} "
+        f"({meta['station_lat']:.3f}°, {meta['station_lon']:.3f}°), "
+        f"{meta['station_alt']:.0f} m ASL\n"
+        "Topography map",
+        pad=18,
+    )
 
 
     # -----------------------------

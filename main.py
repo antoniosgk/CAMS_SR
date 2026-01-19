@@ -33,10 +33,11 @@ lat_s
 """
 #%%
 def main():
-    idx=3 #index of station of the stations_file
+    idx=45 #index of station of the stations_file
     name=None #name of the station
-    cell_nums = 4 #numb of cells that will plotted n**2
-    d_zoom=2.0 #zoom of plots
+    cell_nums = 3 #numb of cells that will plotted n**2
+    d_zoom_species=1.6 #zoom of plots
+    d_zoom_topo=20.0
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
     #-----------
     stations = load_stations(stations_path)
@@ -138,8 +139,8 @@ def main():
     dlat = float(np.abs(lats[1] - lats[0]))
     dlon = float(np.abs(lons[1] - lons[0]))
 
-    cell_nums_lat = int(np.ceil(d_zoom / dlat))
-    cell_nums_lon = int(np.ceil(d_zoom / dlon))
+    cell_nums_lat = int(np.ceil(d_zoom_topo / dlat))
+    cell_nums_lon = int(np.ceil(d_zoom_topo / dlon))
     cell_nums_bg = max(cell_nums_lat, cell_nums_lon)
 
     i1_bg, i2_bg = max(0, i - cell_nums_bg), min(Ny - 1, i + cell_nums_bg)
@@ -252,7 +253,7 @@ def main():
     lon_s, lat_s,
     units=units_ppb,
     species_name=species,
-    d=d_zoom,
+    d=d_zoom_species,
     time_str=time_str,
     meta=meta,
     z_orog_m=z_orog_bg,          
@@ -268,7 +269,7 @@ def main():
     lon_s, lat_s,
     units=units_ppb,
     species_name=species,
-    d=d_zoom,
+    d=d_zoom_species,
     time_str=time_str,
     meta=meta,
     z_orog_m=z_orog_bg,
@@ -278,7 +279,23 @@ def main():
     plot_rectangles(ax2, lats_small, lons_small, ii, jj, im2, meta=meta)
     plt.show()
 
-    
+    fig3, ax3, _ = plot_variable_on_map(
+    lats_small,
+    lons_small,
+    data_arr=None,          # ignored
+    lon_s=lon_s,
+    lat_s=lat_s,
+    units="",
+    species_name="",
+    d=d_zoom_topo,
+    meta=meta,
+    lats_terrain=lats_bg,
+    lons_terrain=lons_bg,
+    z_orog_m=z_orog_bg,
+    add_orog_contours=True,
+    plot_species=False,     # <-- KEY
+)
+
     
     # P–T
     fig_PT, ax_PT = plot_profile_P_T(p_prof, T_prof, idx_level, time_str=time_str,meta=meta)
@@ -319,6 +336,7 @@ def main():
     """
     save_figure(fig1, out_dir, f"map_{species}_{name}_{time_str}")
     save_figure(fig2, out_dir, f"map_with sectors_{species}_{name}_{time_str}")
+    save_figure(fig3,out_dir, f"topo_map_{name}")
     save_figure(fig_PT, out_dir, f"map_P_T_{time_str}")
     save_figure(fig_TlogP, out_dir, f"map_T_lnP_{name}_{time_str}")
     save_figure(fig_SlogP, out_dir, f"map_S_lnP_{species}_{name}_{time_str}")
