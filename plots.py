@@ -74,8 +74,8 @@ def plot_variable_on_map(
     lats_terrain=None,
     lons_terrain=None,
     z_orog_m=None,
-    terrain_alpha=0.1,
-    field_alpha=0.85,
+    terrain_alpha=0.5,
+    field_alpha=0.8,
     add_orog_contours=True,
     plot_species=True
 ):

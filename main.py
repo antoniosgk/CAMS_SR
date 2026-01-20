@@ -8,6 +8,8 @@ import xarray as xr
 import matplotlib.pyplot as plt
 from metpy.constants import g 
 from metpy.units import units as mp_units
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 # main.py
 #%%
 from vertical_indexing import metpy_find_level_index,metpy_compute_heights
@@ -35,10 +37,12 @@ lat_s
 def main():
     idx=45 #index of station of the stations_file
     name=None #name of the station
-    cell_nums = 3 #numb of cells that will plotted n**2
-    d_zoom_species=1.6 #zoom of plots
-    d_zoom_topo=20.0
+    cell_nums = 6 #numb of cells that will plotted n**2
+    d_zoom_species=3.0 #zoom of plots
+    d_zoom_topo=20.0  #zoom of topo in fig3
+    zoom_map= 45.0   #extent of map in fig4
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
+    fig4_with_topo = False
     #-----------
     stations = load_stations(stations_path)
     station = select_station(stations, idx)
@@ -259,7 +263,7 @@ def main():
     z_orog_m=z_orog_bg,          
     lats_terrain=lats_bg,
     lons_terrain=lons_bg,
-    add_orog_contours=False,
+    add_orog_contours=True,
 )
 
     
@@ -292,11 +296,79 @@ def main():
     lats_terrain=lats_bg,
     lons_terrain=lons_bg,
     z_orog_m=z_orog_bg,
+    terrain_alpha=0.6,
     add_orog_contours=True,
     plot_species=False,     # <-- KEY
 )
 
-    
+    # --- FIG4: stations context map (optionally with topography) ---
+    if fig4_with_topo:
+    # background terrain + selected station cross (from your topo function)
+        fig4, ax4, _ = plot_variable_on_map(
+        lats_small,
+        lons_small,
+        data_arr=None,              # ignored
+        lon_s=lon_s,
+        lat_s=lat_s,
+        d=d_zoom_topo,
+        meta=meta,
+        lats_terrain=lats_bg,
+        lons_terrain=lons_bg,
+        z_orog_m=z_orog_bg,
+        add_orog_contours=True,
+        plot_species=False,         # topo-only base
+    )
+    else:
+    # stations-only map (no terrain, no terrain colorbar)
+        proj = ccrs.PlateCarree()
+        fig4, ax4 = plt.subplots(subplot_kw={"projection": proj})
+
+        lon_min, lon_max = lon_s - zoom_map, lon_s + zoom_map
+        lat_min, lat_max = lat_s - zoom_map, lat_s + zoom_map
+        ax4.set_extent([lon_min, lon_max, lat_min, lat_max], crs=proj)
+
+        ax4.add_feature(cfeature.LAND, facecolor="lightgray", zorder=0)
+        ax4.add_feature(cfeature.OCEAN, facecolor="lightblue", zorder=0)
+        ax4.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
+        ax4.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=1)
+
+# --- overlay stations (black) + selected station (red) ---
+    st = stations.copy()
+    st["Latitude"] = pd.to_numeric(st["Latitude"], errors="coerce")
+    st["Longitude"] = pd.to_numeric(st["Longitude"], errors="coerce")
+    st = st.dropna(subset=["Latitude", "Longitude"])
+    # plot only stations within the fig4 extent (cleaner + faster)
+    lon_min, lon_max = lon_s - zoom_map, lon_s + zoom_map
+    lat_min, lat_max = lat_s - zoom_map, lat_s + zoom_map
+    st = st[st["Longitude"].between(lon_min, lon_max) & st["Latitude"].between(lat_min, lat_max)]
+
+    ax4.scatter(
+    st["Longitude"].values,
+    st["Latitude"].values,
+    s=12,
+    c="k",
+    alpha=0.7,
+    transform=ccrs.PlateCarree(),
+    zorder=6,
+    label="Stations",
+)
+
+    ax4.scatter(
+    [lon_s],
+    [lat_s],
+    s=45,
+    c="red",
+    edgecolors="k",
+    linewidths=0.6,
+    transform=ccrs.PlateCarree(),
+    zorder=7,
+    label=f"Selected: {name}",
+)
+
+    ax4.legend(loc="upper right")
+    ax4.set_title(f"Stations in China", pad=18)
+
+
     # P–T
     fig_PT, ax_PT = plot_profile_P_T(p_prof, T_prof, idx_level, time_str=time_str,meta=meta)
     plt.show()
@@ -343,7 +415,7 @@ def main():
     save_figure(fig_SZ, out_dir, f"map_S-Z{species}_{name}_{time_str}")
     save_figure(fig_TZ, out_dir, f"map_T-Z{species}_{name}_{time_str}")
     """
-    #print(f"\nTotal execution time: {time.perf_counter()-t_start:.1f} s")
+    
     
 
 
