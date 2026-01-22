@@ -16,8 +16,8 @@ from vertical_indexing import metpy_find_level_index,metpy_compute_heights
 from stations_utils import load_stations, select_station, all_stations
 from horizontal_indexing import nearest_grid_index
 from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file,RH_file
-from calculation import (compute_sector_masks, sector_table,compute_sector_tables_generic,
-                         compute_sector_tables,sector_stats,compute_ring_sector_masks)
+from calculation import (sector_table,compute_sector_tables_generic,
+                        sector_stats,compute_ring_sector_masks)
 from plots import (plot_variable_on_map,plot_rectangles,plot_sector_boxplots,
     plot_profile_P_T,
     plot_profile_T_Z,
@@ -38,7 +38,7 @@ lat_s
 def main():
     idx=45 #index of station of the stations_file
     name=None #name of the station
-    cell_nums = 3 #numb of cells that will get plotted n**2
+    cell_nums = 5 #numb of cells that will get plotted n**2
     d_zoom_species=0.6 #zoom of plots
     d_zoom_topo=4.0  #zoom of topo in fig3
     zoom_map= 45.0   #extent of map in fig4

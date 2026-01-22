@@ -252,8 +252,8 @@ def plot_rectangles(
     species_name="var",
     time_str=None,
     meta=None,
-    radii
-):
+    radii=3
+     ):
     import numpy as np
     import cartopy.crs as ccrs
     from matplotlib.patches import Rectangle
