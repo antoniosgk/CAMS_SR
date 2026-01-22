@@ -12,6 +12,7 @@ import cartopy.io.img_tiles as cimgt
 import os
 import re
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import pandas as pd
 
 
 def _sanitize_filename(s: str) -> str:
@@ -251,6 +252,7 @@ def plot_rectangles(
     species_name="var",
     time_str=None,
     meta=None,
+    radii
 ):
     import numpy as np
     import cartopy.crs as ccrs
@@ -849,4 +851,32 @@ def plot_profile_species_Z(z_prof_m, species_prof, idx_level,
     ax.grid(True, linestyle="--", alpha=0.5)
     ax.legend(loc="best")
 
+    return fig, ax
+
+
+
+def plot_sector_boxplots(sector_dfs, var_name, sector_names=None, title=None, ax=None):
+    """
+    Boxplots of var_name for multiple sectors.
+    sector_dfs: list of DataFrames [df_S1, df_S2, ...]
+    """
+    if sector_names is None:
+        sector_names = [f"S{k+1}" for k in range(len(sector_dfs))]
+
+    data = []
+    for df in sector_dfs:
+        vals = pd.to_numeric(df[var_name], errors="coerce").to_numpy(dtype=float)
+        vals = vals[np.isfinite(vals)]
+        data.append(vals)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.figure
+
+    ax.boxplot(data, labels=sector_names, showfliers=False)
+    ax.set_ylabel(var_name)
+    if title:
+        ax.set_title(title)
+    ax.grid(True, linestyle="--", alpha=0.4)
     return fig, ax

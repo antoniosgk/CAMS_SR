@@ -16,8 +16,9 @@ from vertical_indexing import metpy_find_level_index,metpy_compute_heights
 from stations_utils import load_stations, select_station, all_stations
 from horizontal_indexing import nearest_grid_index
 from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file,RH_file
-from calculation import compute_sector_masks, sector_table
-from plots import (plot_variable_on_map,plot_rectangles,
+from calculation import (compute_sector_masks, sector_table,compute_sector_tables_generic,
+                         compute_sector_tables,sector_stats,compute_ring_sector_masks)
+from plots import (plot_variable_on_map,plot_rectangles,plot_sector_boxplots,
     plot_profile_P_T,
     plot_profile_T_Z,
     plot_profile_T_logP,
@@ -37,10 +38,11 @@ lat_s
 def main():
     idx=45 #index of station of the stations_file
     name=None #name of the station
-    cell_nums = 6 #numb of cells that will plotted n**2
-    d_zoom_species=3.0 #zoom of plots
-    d_zoom_topo=20.0  #zoom of topo in fig3
+    cell_nums = 3 #numb of cells that will get plotted n**2
+    d_zoom_species=0.6 #zoom of plots
+    d_zoom_topo=4.0  #zoom of topo in fig3
     zoom_map= 45.0   #extent of map in fig4
+    radii = list(range(1, cell_nums + 1))
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
     fig4_with_topo = False
     #-----------
@@ -280,7 +282,7 @@ def main():
     lats_terrain=lats_bg,
     lons_terrain=lons_bg
 )
-    plot_rectangles(ax2, lats_small, lons_small, ii, jj, im2, meta=meta)
+    plot_rectangles(ax2, lats_small, lons_small, ii, jj, im2, meta=meta,radii=radii)
     plt.show()
 
     fig3, ax3, _ = plot_variable_on_map(
@@ -405,6 +407,26 @@ def main():
 )
 
     plt.show()
+    
+
+    sector_dfs, sector_masks = compute_sector_tables_generic(
+    ii, jj, lats_small, lons_small, data_arr, species, radii=radii
+)
+    sector_names = [f"S{k+1}" for k in range(len(sector_dfs))]
+
+    print("\nSector statistics:")
+    for nm, df in zip(sector_names, sector_dfs):
+     st = sector_stats(df, species)
+     print(
+        f"{nm}: n={st['n']}, mean={st['mean']:.3e}, CV={st['cv']:.2f}, "
+        f"median={st['median']:.3e}, IQR={st['iqr']:.3e}"
+    )
+
+
+    fig_box, ax_box = plot_sector_boxplots(
+    sector_dfs, var_name=species, sector_names=sector_names,
+    title=f"{species} distributions by sector (radii={radii})"
+)
     """
     save_figure(fig1, out_dir, f"map_{species}_{name}_{time_str}")
     save_figure(fig2, out_dir, f"map_with sectors_{species}_{name}_{time_str}")

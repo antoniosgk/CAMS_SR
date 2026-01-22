@@ -13,35 +13,30 @@ def safe_slice(low, high, maxN):
     return slice(max(low, 0), min(high, maxN))
 
 
-def compute_sector_masks(ii, jj, Ny, Nx):
+
+def compute_ring_sector_masks(ii, jj, Ny, Nx, radii):
     """
-    Compute boolean masks S1, S2, S3 around central grid cell (ii, jj).
+    Build ring sectors around (ii, jj) for arbitrary radii.
 
-    S1: 3x3 box around (ii, jj)
-    S2: 5x5 box minus S1
-    S3: 7x7 box minus S1 and S2
+    radii: list/tuple of integers, e.g. [1,2,3,4]
+           Sector k is the square (radius=radii[k]) minus square (radius=radii[k-1]).
+           The first sector is the (2*r+1)x(2*r+1) square including the center.
+
+    Returns: list of masks [S1, S2, ...]
     """
-    # Sector 1
-    S1 = np.zeros((Ny, Nx), dtype=bool)
-    S1[safe_slice(ii - 1, ii + 2, Ny),
-       safe_slice(jj - 1, jj + 2, Nx)] = True
-    S1[ii, jj] = True
+    masks = []
+    prev = np.zeros((Ny, Nx), dtype=bool)
 
-    # Sector 2
-    S2 = np.zeros((Ny, Nx), dtype=bool)
-    S2[safe_slice(ii - 2, ii + 3, Ny),
-       safe_slice(jj - 2, jj + 3, Nx)] = True
-    S2[S1] = False
+    for r in radii:
+        box = np.zeros((Ny, Nx), dtype=bool)
+        box[safe_slice(ii - r, ii + r + 1, Ny),
+            safe_slice(jj - r, jj + r + 1, Nx)] = True
 
-    # Sector 3
-    S3 = np.zeros((Ny, Nx), dtype=bool)
-    S3[safe_slice(ii - 3, ii + 4, Ny),
-       safe_slice(jj - 3, jj + 4, Nx)] = True
-    S3[S1] = False
-    S3[S2] = False
+        ring = box & (~prev)
+        masks.append(ring)
+        prev = box
 
-    return S1, S2, S3
-
+    return masks
 
 def sector_table(mask, lats_small, lons_small, data_arr, var_name):
     """
@@ -74,15 +69,37 @@ def sector_table(mask, lats_small, lons_small, data_arr, var_name):
     })
 
 
-def compute_sector_tables(ii, jj, lats_small, lons_small, data_arr, var_name):
-    """
-    Convenience helper: compute S1/S2/S3 masks and return their tables.
-    """
-    Ny, Nx = data_arr.shape
-    S1, S2, S3 = compute_sector_masks(ii, jj, Ny, Nx)
 
-    df_S1 = sector_table(S1, lats_small, lons_small, data_arr, var_name)
-    df_S2 = sector_table(S2, lats_small, lons_small, data_arr, var_name)
-    df_S3 = sector_table(S3, lats_small, lons_small, data_arr, var_name)
-    print(df_S1)
-    return df_S1, df_S2, df_S3, S1, S2, S3
+
+def sector_stats(df, var_name):
+    """
+    Compute summary stats for a sector:
+    mean, std, CV, median, IQR (Q3-Q1), n
+    """
+    vals = pd.to_numeric(df[var_name], errors="coerce").to_numpy(dtype=float)
+    vals = vals[np.isfinite(vals)]
+
+    if vals.size == 0:
+        return {"n": 0, "mean": np.nan, "std": np.nan, "cv": np.nan,
+                "median": np.nan, "q1": np.nan, "q3": np.nan, "iqr": np.nan}
+
+    mean = float(np.mean(vals))
+    std = float(np.std(vals))
+    cv = float(std / mean) if mean != 0 else np.nan
+
+    q1 = float(np.percentile(vals, 25))
+    median = float(np.percentile(vals, 50))
+    q3 = float(np.percentile(vals, 75))
+    iqr = float(q3 - q1)
+
+    return {"n": int(vals.size), "mean": mean, "std": std, "cv": cv,
+            "median": median, "q1": q1, "q3": q3, "iqr": iqr}
+
+def compute_sector_tables_generic(ii, jj, lats_small, lons_small, data_arr, var_name, radii):
+    Ny, Nx = data_arr.shape
+    masks = compute_ring_sector_masks(ii, jj, Ny, Nx, radii)
+
+    dfs = [sector_table(m, lats_small, lons_small, data_arr, var_name) for m in masks]
+    return dfs, masks
+
+
