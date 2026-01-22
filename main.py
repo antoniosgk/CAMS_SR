@@ -38,7 +38,7 @@ lat_s
 def main():
     idx=45 #index of station of the stations_file
     name=None #name of the station
-    cell_nums = 5 #numb of cells that will get plotted n**2
+    cell_nums = 2 #numb of cells that will get plotted n**2
     d_zoom_species=0.6 #zoom of plots
     d_zoom_topo=4.0  #zoom of topo in fig3
     zoom_map= 45.0   #extent of map in fig4

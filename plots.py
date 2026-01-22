@@ -252,33 +252,35 @@ def plot_rectangles(
     species_name="var",
     time_str=None,
     meta=None,
-    radii=3
-     ):
+    radii=None
+):
     import numpy as np
     import cartopy.crs as ccrs
     from matplotlib.patches import Rectangle
 
+    # ---------- SAFETY ----------
+    if radii is None:
+        raise ValueError("plot_rectangles: 'radii' must be provided (e.g. [1,2,3]).")
+
     lats_small = np.asarray(lats_small, dtype=float)
     lons_small = np.asarray(lons_small, dtype=float)
 
-    # safety (optional but helpful)
     if not (0 <= ii < len(lats_small) and 0 <= jj < len(lons_small)):
-        raise IndexError(f"(ii,jj)=({ii},{jj}) out of bounds for lats/lons small.")
+        raise IndexError(f"(ii,jj)=({ii},{jj}) out of bounds.")
 
+    # ---------- GRID SPACING ----------
     dlon = float(np.abs(lons_small[1] - lons_small[0]))
     dlat = float(np.abs(lats_small[1] - lats_small[0]))
 
     cx = float(lons_small[jj])
     cy = float(lats_small[ii])
 
-    sizes = {"S1": 1, "S2": 2, "S3": 3}
-    rect_styles = {
-        "S1": {"edgecolor": "black", "linewidth": 2},
-        "S2": {"edgecolor": "red",   "linewidth": 2},
-        "S3": {"edgecolor": "blue",  "linewidth": 2},
-    }
+    colors = ["black", "red", "blue", "orange", "purple", "brown"]
 
-    for name, r in sizes.items():
+    # ---------- DRAW RECTANGLES ----------
+    for k, r in enumerate(radii, start=1):
+        color = colors[(k - 1) % len(colors)]
+
         width = (2 * r + 1) * dlon
         height = (2 * r + 1) * dlat
         left = cx - width / 2
@@ -289,15 +291,17 @@ def plot_rectangles(
             width,
             height,
             facecolor="none",
+            edgecolor=color,       
+            linewidth=2.5,         
             transform=ccrs.PlateCarree(),
-            zorder=10,                 # <-- key: always on top
-            **rect_styles[name],
+            zorder=20              # always above fields & terrain
         )
         ax.add_patch(rect)
 
+    # ---------- TITLE ----------
     if meta is not None:
-        ax.set_title(build_meta_title(meta, kind="Map with Sectors"), pad=18)
-        ax.figure.subplots_adjust(top=0.82)
+        ax.set_title(build_meta_title(meta, kind="Map with Sectors"), pad=22)
+        ax.figure.subplots_adjust(top=0.84)
 
     return ax, im
 
