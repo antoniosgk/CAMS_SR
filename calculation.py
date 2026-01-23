@@ -30,7 +30,7 @@ def compute_ring_sector_masks(ii, jj, Ny, Nx, radii):
     for r in radii:
         box = np.zeros((Ny, Nx), dtype=bool)
         box[safe_slice(ii - r, ii + r + 1, Ny),
-            safe_slice(jj - r, jj + r + 1, Nx)] = True
+            safe_slice(jj - r, jj + r + 1, Nx)] = True  #True 
 
         ring = box & (~prev)
         masks.append(ring)
@@ -102,4 +102,46 @@ def compute_sector_tables_generic(ii, jj, lats_small, lons_small, data_arr, var_
     dfs = [sector_table(m, lats_small, lons_small, data_arr, var_name) for m in masks]
     return dfs, masks
 
+def cumulative_sector_masks(sector_masks):
+    """
+    Build cumulative sector masks.
+
+    Input
+    -----
+    sector_masks : list of boolean masks
+        [S1, S2, S3, ...] where each is a disjoint ring
+
+    Returns
+    -------
+    cumulative_masks : list of boolean masks
+        [C1, C2, C3, ...]
+        Ck = union of S1 ... Sk
+    """
+    cumulative_masks = []
+    running = np.zeros_like(sector_masks[0], dtype=bool)
+
+    for S in sector_masks:
+        running = running | S
+        cumulative_masks.append(running.copy())
+
+    return cumulative_masks
+
+def compute_cumulative_sector_tables(
+    sector_masks,
+    lats_small,
+    lons_small,
+    data_arr,
+    var_name,
+):
+    """
+    Build DataFrames for cumulative sectors.
+    """
+    cumulative_masks = cumulative_sector_masks(sector_masks)
+
+    dfs = []
+    for k, mask in enumerate(cumulative_masks, start=1):
+        df = sector_table(mask, lats_small, lons_small, data_arr, var_name)
+        dfs.append(df)
+
+    return dfs, cumulative_masks
 

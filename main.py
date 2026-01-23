@@ -17,7 +17,7 @@ from stations_utils import load_stations, select_station, all_stations
 from horizontal_indexing import nearest_grid_index
 from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file,RH_file
 from calculation import (sector_table,compute_sector_tables_generic,
-                        sector_stats,compute_ring_sector_masks)
+                        sector_stats,compute_ring_sector_masks,compute_cumulative_sector_tables)
 from plots import (plot_variable_on_map,plot_rectangles,plot_sector_boxplots,
     plot_profile_P_T,
     plot_profile_T_Z,
@@ -38,9 +38,9 @@ lat_s
 def main():
     idx=45 #index of station of the stations_file
     name=None #name of the station
-    cell_nums = 2 #numb of cells that will get plotted n**2
+    cell_nums = 8 #numb of cells that will get plotted n**2
     d_zoom_species=0.6 #zoom of plots
-    d_zoom_topo=4.0  #zoom of topo in fig3
+    d_zoom_topo=50.0  #zoom of topo in fig3
     zoom_map= 45.0   #extent of map in fig4
     radii = list(range(1, cell_nums + 1))
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
@@ -410,23 +410,49 @@ def main():
     
 
     sector_dfs, sector_masks = compute_sector_tables_generic(
-    ii, jj, lats_small, lons_small, data_arr, species, radii=radii
-)
-    sector_names = [f"S{k+1}" for k in range(len(sector_dfs))]
+    ii, jj, lats_small, lons_small, data_arr_ppb, species, radii=radii)
 
+    sector_names = [f"S{k+1}" for k in range(len(sector_dfs))]
+    
     print("\nSector statistics:")
     for nm, df in zip(sector_names, sector_dfs):
      st = sector_stats(df, species)
      print(
-        f"{nm}: n={st['n']}, mean={st['mean']:.3e}, CV={st['cv']:.2f}, "
+        f"{nm}: n={st['n']}, mean={st['mean']:.3e}, CV={st['cv']:.4f}, "
         f"median={st['median']:.3e}, IQR={st['iqr']:.3e}"
     )
+
+    cum_dfs, cum_masks = compute_cumulative_sector_tables(
+    sector_masks,
+    lats_small,
+    lons_small,
+    data_arr_ppb,
+    species
+)
+    cum_names = [f"C{k}" for k in range(1, len(cum_dfs) + 1)]
+    print("\nCUMULATIVE SECTOR STATISTICS")
+    for k, df in enumerate(cum_dfs, start=1):
+        stats = sector_stats(df, species)
+        print(
+        f"C{k}: n={stats['n']}, "
+        f"CV={stats['cv']:.4f} "
+        f"mean={stats['mean']:.3e}, "
+        f"median={stats['median']:.3e}, "
+        f"IQR={stats['iqr']:.3e}, "
+        )
 
 
     fig_box, ax_box = plot_sector_boxplots(
     sector_dfs, var_name=species, sector_names=sector_names,
-    title=f"{species} distributions by sector (radii={radii})"
+    title=f"{species} distributions by sector (radii={radii} in {units_ppb})"
 )
+    fig_cbox, ax_cbox = plot_sector_boxplots(
+    cum_dfs,
+    var_name=species,
+    sector_names=cum_names,
+    title=f"{species} cumulative distributions (up to radius r=1..{cell_nums} in {units_ppb})"
+)
+
     """
     save_figure(fig1, out_dir, f"map_{species}_{name}_{time_str}")
     save_figure(fig2, out_dir, f"map_with sectors_{species}_{name}_{time_str}")
