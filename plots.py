@@ -55,7 +55,6 @@ def build_meta_title(meta, kind=""):
 
 
 def plot_variable_on_map(
-    # species grid (always 1D)
     lats_small,
     lons_small,
     data_arr,
@@ -78,8 +77,8 @@ def plot_variable_on_map(
     terrain_alpha=0.5,
     field_alpha=0.8,
     add_orog_contours=True,
-    plot_species=True
-):
+    plot_species=True,plot_orography=False
+    ):
     
 
     # --- Projection / axes (must be GeoAxes) ---
@@ -101,7 +100,7 @@ def plot_variable_on_map(
 
     # --- TERRAIN underlay (optional) ---
     terrain_im = None
-    if (z_orog_m is not None) and (lats_terrain is not None) and (lons_terrain is not None):
+    if plot_orography and (z_orog_m is not None) and (lats_terrain is not None) and (lons_terrain is not None):
         lats_terrain = np.asarray(lats_terrain, dtype=float)
         lons_terrain = np.asarray(lons_terrain, dtype=float)
         z_orog_m = np.asarray(z_orog_m, dtype=float)
@@ -178,7 +177,8 @@ def plot_variable_on_map(
     )
 
     # coast/borders on top
-    ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=5)
+    ax.coastlines(resolution="10m", linewidth=0.8)
+    #ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=5)
     ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=5)
 
     # --- Two colorbars (terrain left, species right) ---

@@ -13,7 +13,7 @@ import cartopy.feature as cfeature
 # main.py
 #%%
 from vertical_indexing import metpy_find_level_index,metpy_compute_heights
-from stations_utils import load_stations, select_station, all_stations
+from stations_utils import load_stations, select_station, all_stations, map_stations_to_model_levels
 from horizontal_indexing import nearest_grid_index
 from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file,RH_file
 from calculation import (sector_table,compute_sector_tables_generic,
@@ -38,11 +38,11 @@ lat_s
 def main():
     idx=45 #index of station of the stations_file
     name=None #name of the station
-    cell_nums = 8 #numb of cells that will get plotted n**2
-    d_zoom_species=0.6 #zoom of plots
-    d_zoom_topo=50.0  #zoom of topo in fig3
+    cell_nums = 50 #numb of cells that will get plotted n**2
+    d_zoom_species=5.0 #zoom of plots
+    d_zoom_topo=20.0  #zoom of topo in fig3
     zoom_map= 45.0   #extent of map in fig4
-    radii = list(range(1, cell_nums + 1))
+    radii = list(range(1, 10)) #(range(1,cell_nums+1))
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
     fig4_with_topo = False
     #-----------
@@ -266,6 +266,7 @@ def main():
     lats_terrain=lats_bg,
     lons_terrain=lons_bg,
     add_orog_contours=True,
+    plot_orography=False
 )
 
     
@@ -280,7 +281,7 @@ def main():
     meta=meta,
     z_orog_m=z_orog_bg,
     lats_terrain=lats_bg,
-    lons_terrain=lons_bg
+    lons_terrain=lons_bg,plot_orography=False
 )
     plot_rectangles(ax2, lats_small, lons_small, ii, jj, im2, meta=meta,radii=radii)
     plt.show()
@@ -297,10 +298,11 @@ def main():
     meta=meta,
     lats_terrain=lats_bg,
     lons_terrain=lons_bg,
+    plot_orography=True,
     z_orog_m=z_orog_bg,
     terrain_alpha=0.6,
     add_orog_contours=True,
-    plot_species=False,     # <-- KEY
+    plot_species=False,
 )
 
     # --- FIG4: stations context map (optionally with topography) ---
@@ -316,6 +318,7 @@ def main():
         meta=meta,
         lats_terrain=lats_bg,
         lons_terrain=lons_bg,
+        plot_orography=True,
         z_orog_m=z_orog_bg,
         add_orog_contours=True,
         plot_species=False,         # topo-only base
@@ -331,9 +334,15 @@ def main():
 
         ax4.add_feature(cfeature.LAND, facecolor="lightgray", zorder=0)
         ax4.add_feature(cfeature.OCEAN, facecolor="lightblue", zorder=0)
-        ax4.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
+        ax4.coastlines(resolution="10m", linewidth=0.8)
+        #ax4.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=1)
         ax4.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=1)
-
+        ax4.gridlines(crs=ccrs.PlateCarree(),
+        draw_labels=True,
+        linewidth=0.6,
+        alpha=0.95,
+        linestyle="--",
+        zorder=1)
 # --- overlay stations (black) + selected station (red) ---
     st = stations.copy()
     st["Latitude"] = pd.to_numeric(st["Latitude"], errors="coerce")
@@ -347,7 +356,7 @@ def main():
     ax4.scatter(
     st["Longitude"].values,
     st["Latitude"].values,
-    s=12,
+    s=6,
     c="k",
     alpha=0.7,
     transform=ccrs.PlateCarree(),
@@ -466,8 +475,20 @@ def main():
     
     
 
+    df_levels, n_not_surface, df_non_surface = map_stations_to_model_levels(
+    stations,
+    ds_T,
+    ds_PL,
+    ds_orog,
+    lats,
+    lons,
+    RH_ds=ds_RH,
+    )
 
-
+    #print(df_levels.head())
+    print(f"Stations NOT mapped to surface level: {n_not_surface} / {len(df_levels)}")
+    df_levels.to_csv("station_model_level_mapping.csv", index=False)
+    print(df_non_surface.head(26))
 
 
 

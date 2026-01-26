@@ -266,8 +266,8 @@ def metpy_find_level_index(p_prof_Pa, T_prof_K, station_alt_m,
         vertical_idx = int(np.argmin(diff))
 
         # If everything was NaN, argmin returns 0 with infs too; guard it
-        if not np.isfinite(diff[vertical_idx]):
-            raise ValueError("All height differences are non-finite (z_prof contains only NaNs/Infs).")
+        #if not np.isfinite(diff[vertical_idx]):
+           # raise ValueError("All height differences are non-finite (z_prof contains only NaNs/Infs).")
 
         if diff[vertical_idx] > 1500.0:
             print(f"WARNING: nearest model level is {diff[vertical_idx]:.0f} m away from station altitude")

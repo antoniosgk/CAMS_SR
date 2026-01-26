@@ -1,6 +1,9 @@
 #%%
 import pandas as pd
+import numpy as np
 from file_utils import base_path,stations_path
+from vertical_indexing import metpy_find_level_index
+from horizontal_indexing import nearest_grid_index
 #%%
 def load_stations(stations_path):
     """Load station table. Expects tab-separated with Station_Name, Latitude, Longitude, Altitude.
@@ -157,3 +160,99 @@ def all_stations():
         f"\nOut of {total_stations} stations, "
         f"{non71_count} do not have level 71 as the closest model level."
     )
+def map_stations_to_model_levels(
+    stations,
+    ds_T,
+    ds_PL,
+    ds_orog,
+    lats,
+    lons,
+    RH_ds=None,
+):
+    # --- Drop stations with invalid lat/lon/alt ---
+    stations_clean = stations.copy()
+
+    for col in ["Latitude", "Longitude", "Altitude"]:
+     stations_clean[col] = pd.to_numeric(stations_clean[col], errors="coerce")
+
+    stations_clean = stations_clean.dropna(
+    subset=["Latitude", "Longitude", "Altitude"]
+)
+
+    stations_clean = stations_clean.reset_index(drop=True)
+
+    records = []
+    non_surface_records=[]
+    not_surface_count = 0
+    surface_level = 22
+
+    for _, st in stations_clean.iterrows():
+        lat_s = float(st["Latitude"])
+        lon_s = float(st["Longitude"])
+        alt_s = float(st["Altitude"])
+        name = st["Station_Name"]
+
+        # nearest grid cell
+        i, j = nearest_grid_index(lat_s, lon_s, lats, lons)
+
+        # surface height
+        PHIS_val = ds_orog["PHIS"].isel(time=0, lat=i, lon=j).item()
+        z_surf_model = PHIS_val / 9.80665  # geopotential → height (m)
+
+        # profiles
+        T_prof = ds_T["T"].values[0, :, i, j]
+        p_prof = ds_PL["PL"].values[0, :, i, j]
+
+        RH_prof = None
+        if RH_ds is not None:
+            RH_prof = RH_ds["RH"].values[0, :, i, j]
+
+        # vertical indexing
+        idx_level, p_hPa, z_level = metpy_find_level_index(
+            p_prof_Pa=p_prof,
+            T_prof_K=T_prof,
+            RH=RH_prof,
+            station_alt_m=alt_s,
+            z_surf_model=z_surf_model,
+        )
+
+        if idx_level != np.argmax(p_prof):
+            not_surface_count += 1
+            non_surface_records.append({
+            "station_name": name,
+            "lat": lat_s,
+            "lon": lon_s,
+            "alt_m": alt_s,
+            "model_level": int(idx_level),
+            "model_pressure_hPa": float(p_hPa),
+            "model_height_m": int(idx_level),
+    })
+        records.append({
+            "station": name,
+            "lat": lat_s,
+            "lon": lon_s,
+            "altitude_m": alt_s,
+            "model_lat": float(lats[i]),
+            "model_lon": float(lons[j]),
+            "model_level": int(idx_level),
+            "model_pressure_hPa": float(p_hPa),
+            "model_height_m": float(z_level),
+        })
+        
+
+    df = pd.DataFrame(records)
+    n_non_surface = len(non_surface_records)
+
+    print(f"\nStations NOT mapped to surface model level ({surface_level}): "
+      f"{n_non_surface}")
+
+    if n_non_surface > 0:
+     
+     df_non_surface = pd.DataFrame(non_surface_records)
+     df_non_surface.to_csv(
+        "stations_not_on_surface_level.csv",
+        index=False
+    )    
+
+    return df, not_surface_count,df_non_surface
+
