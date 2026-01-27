@@ -21,7 +21,7 @@ from calculation import (sector_table,compute_sector_tables_generic,
                         weighted_quantile,sector_stats_unweighted,sector_stats_weighted
                         )
 from plots import (plot_variable_on_map,plot_rectangles,plot_sector_boxplots,
-    plot_profile_P_T,
+    plot_profile_P_T,plot_cv_cumulative_sectors,plot_cv_ring_sectors,
     plot_profile_T_Z,
     plot_profile_T_logP,
     plot_profile_species_logP,
@@ -40,11 +40,11 @@ lat_s
 def main():
     idx=23 #index of station of the stations_file
     name=None #name of the station
-    cell_nums = 50 #numb of cells that will get plotted n**2
+    cell_nums = 30 #numb of cells that will get plotted n**2
     d_zoom_species=5.0 #zoom of plots
     d_zoom_topo=5.0  #zoom of topo in fig3
     zoom_map= 45.0   #extent of map in fig4
-    radii = list(range(1, 4)) #(range(1,cell_nums+1))
+    radii = list(range(1, cell_nums+1)) #(range(1,cell_nums+1))
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
     fig4_with_topo = False
     #-----------
@@ -471,6 +471,21 @@ def main():
         f"mean_w={sw['mean_w']:.3f}, std_w={sw['std_w']:.3f}, cv_w={sw['cv_w']:.3f}, "
         f"med_w={sw['median_w']:.3f}, IQR_w={sw['iqr_w']:.3f}"
     )
+    ring_stats_unw = []
+    ring_stats_w   = []
+
+    for df in sector_dfs:
+     ring_stats_unw.append(sector_stats_unweighted(df, species))
+     ring_stats_w.append(sector_stats_weighted(df, species, w_col="w_area"))
+
+    cum_stats_unw = []
+    cum_stats_w   = []
+
+    for df in cum_dfs:
+      cum_stats_unw.append(sector_stats_unweighted(df, species))
+      cum_stats_w.append(sector_stats_weighted(df, species, w_col="w_area"))
+
+ 
 
 
 
@@ -492,6 +507,21 @@ def main():
     fig_w, ax_w = plot_sector_boxplots_weighted(cum_dfs, species, w_col="w_area",
                                             sector_names=[f"S{k}" for k in range(1, len(sector_dfs)+1)],
                                             title=f"{species} cumulative sectors (AREA-WEIGHTED)")
+    # Ring sectors CV
+    fig_cv_ring, ax_cv_ring = plot_cv_ring_sectors(
+    ring_stats_unw,
+    ring_stats_w,
+    title=f"{species} CV — ring sectors"
+)
+
+# Cumulative sectors CV
+    fig_cv_cum, ax_cv_cum = plot_cv_cumulative_sectors(
+    cum_stats_unw,
+    cum_stats_w,
+    title=f"{species} CV — cumulative sectors"
+)
+
+
     
 
     """

@@ -950,3 +950,96 @@ def box_stats_from_df(df, var_col, w_col=None, label=""):
             q25 = med = q75 = lo = hi = np.nan
 
     return dict(label=label, q1=q25, med=med, q3=q75, whislo=lo, whishi=hi)
+
+def plot_cv_ring_sectors(stats_unw, stats_w, title=None, ax=None):
+    """
+    Line plot of CV (unweighted vs weighted) for ring sectors.
+
+    stats_unw : list of dicts from sector_stats_unweighted (S1, S2, ...)
+    stats_w   : list of dicts from sector_stats_weighted   (S1, S2, ...)
+    """
+
+    cv_unw = [d["cv"] for d in stats_unw]
+    cv_w   = [d["cv_w"] for d in stats_w]
+    x = np.arange(1, len(cv_unw) + 1)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.figure
+
+    ax.plot(x, cv_unw, marker="o", label="CV (unweighted)")
+    ax.plot(x, cv_w, marker="s", label="CV (area-weighted)")
+
+    ax.set_xlabel("Ring sector")
+    ax.set_ylabel("Coefficient of Variation")
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"S{k}" for k in x])
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
+
+    if title:
+        ax.set_title(title)
+
+    return fig, ax
+def plot_cv_ring_sectors(stats_unw, stats_w, title=None, ax=None):
+    """
+    Line plot of CV (unweighted vs area-weighted) for ring sectors S1, S2, ...
+    """
+
+    cv_unw = [d["cv"] for d in stats_unw]
+    cv_w   = [d["cv_w"] for d in stats_w]
+    x = np.arange(1, len(cv_unw) + 1)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.figure
+
+    ax.plot(x, cv_unw, marker="o", linewidth=2,
+            label="CV (unweighted)")
+    ax.plot(x, cv_w, marker="s", linewidth=2,
+            label="CV (area-weighted)")
+
+    ax.set_xlabel("Ring sector")
+    ax.set_ylabel("Coefficient of Variation")
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"S{k}" for k in x])
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
+
+    if title:
+        ax.set_title(title)
+
+    return fig, ax
+def plot_cv_cumulative_sectors(stats_unw, stats_w, title=None, ax=None):
+    """
+    Line plot of CV (unweighted vs area-weighted)
+    for cumulative sectors C1, C2, ...
+    """
+
+    cv_unw = [d["cv"] for d in stats_unw]
+    cv_w   = [d["cv_w"] for d in stats_w]
+    x = np.arange(1, len(cv_unw) + 1)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.figure
+
+    ax.plot(x, cv_unw, marker="o", linewidth=2,
+            label="CV (unweighted)")
+    ax.plot(x, cv_w, marker="s", linewidth=2,
+            label="CV (area-weighted)")
+
+    ax.set_xlabel("Cumulative sector")
+    ax.set_ylabel("Coefficient of Variation")
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"C{k}" for k in x])
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
+
+    if title:
+        ax.set_title(title)
+
+    return fig, ax
