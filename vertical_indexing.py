@@ -257,7 +257,7 @@ def metpy_find_level_index(p_prof_Pa, T_prof_K, station_alt_m,
         print("DEBUG: few levels near surface (by max pressure index):")
 
         k_surf = int(np.argmax(p_arr))
-        for k in range(max(0, k_surf - 2), min(len(z_prof), k_surf + 3)):
+        for k in range(max(0, k_surf - 5), min(len(z_prof), k_surf + 3)):
             print(f"  k={k:2d}: p={p_hPa_prof[k]:7.2f} hPa, z={z_prof[k]:8.1f} m")
 
         # ---- FIX: NaN-safe selection ----

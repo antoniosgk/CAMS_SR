@@ -6,12 +6,11 @@ from vertical_indexing import metpy_find_level_index
 from horizontal_indexing import nearest_grid_index
 #%%
 def load_stations(stations_path):
-    """Load station table. Expects tab-separated with Station_Name, Latitude, Longitude, Altitude.
-       Renames index to 'idx'."""
+    """Load station table. Keeps all rows; marks invalid rows (NaNs) for later filtering."""
     df = pd.read_csv(stations_path, sep="\t")
     df = df.reset_index().rename(columns={"index": "idx"})
-    # Attempt normalization of column names: Cases if the names are not those expected,not needed as
-    #we know the names of the columns a priori
+
+    # normalize column names
     for col in df.columns:
         if col.lower().startswith("station"):
             df = df.rename(columns={col: "Station_Name"})
@@ -21,32 +20,53 @@ def load_stations(stations_path):
             df = df.rename(columns={col: "Longitude"})
         if col.lower().startswith("alt"):
             df = df.rename(columns={col: "Altitude"})
+
     expected = ["idx", "Station_Name", "Latitude", "Longitude", "Altitude"]
     missing = [c for c in expected if c not in df.columns]
     if missing:
-        raise ValueError(f"Stations file missing expected columns: {missing}") #raises error if the col names are not those expected
-    return df[expected]
+        raise ValueError(f"Stations file missing expected columns: {missing}")
+
+    # coerce numeric; DO NOT drop rows here
+    for col in ["Latitude", "Longitude", "Altitude"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # mark validity (so bulk loops can filter)
+    df["is_valid"] = df[["Latitude", "Longitude", "Altitude"]].notna().all(axis=1)
+
+    return df[expected + ["is_valid"]]
+
 
 
 def select_station(df, idx=None, name=None):
-    """Return station row based on index or name 
-     This function can be removed as the user puts the name or the index of the station he wants"""
+    """Return station row by idx or name. If station exists but has NaNs, raise a clear error."""
     if idx is None and name is None:
-        print(df[["idx", "Station_Name"]])
+        print(df[["idx", "Station_Name", "is_valid"]])
         s = input("Select station by index or name: ").strip()
     else:
         s = str(idx if idx is not None else name)
 
+    row = None
+
     if s.isdigit():
-        row = df[df["idx"] == int(s)]
-        if not row.empty:
-            return row.iloc[0]
+        r = df[df["idx"] == int(s)]
+        if not r.empty:
+            row = r.iloc[0]
+    else:
+        r = df[df["Station_Name"] == s]
+        if not r.empty:
+            row = r.iloc[0]
 
-    row = df[df["Station_Name"] == s]
-    if not row.empty:
-        return row.iloc[0]
+    if row is None:
+        raise ValueError(f"Station '{s}' not found.")
 
-    raise ValueError(f"Station '{s}' not found.")
+    if not bool(row.get("is_valid", True)):
+        raise ValueError(
+            f"Station '{row['Station_Name']}' (idx={row['idx']}) has missing "
+            f"Latitude/Longitude/Altitude in the stations file; cannot run calculations."
+        )
+
+    return row
+
 
 def all_stations():
     """
@@ -98,7 +118,8 @@ def all_stations():
 
     printed = 0
     non71_count = 0
-    for _, station in stations.iterrows():
+    stations_valid = stations[stations["is_valid"]].copy()
+    for _, station in stations_valid.iterrows():
         lat_raw = station["Latitude"]
         lon_raw = station["Longitude"]
         alt_raw = station["Altitude"]
@@ -186,11 +207,12 @@ def map_stations_to_model_levels(
     not_surface_count = 0
     surface_level = 22
 
-    for _, st in stations_clean.iterrows():
-        lat_s = float(st["Latitude"])
-        lon_s = float(st["Longitude"])
-        alt_s = float(st["Altitude"])
-        name = st["Station_Name"]
+    stations_valid = stations[stations["is_valid"]].copy()
+    for _, station in stations_valid.iterrows():
+        lat_s = float(station["Latitude"])
+        lon_s = float(station["Longitude"])
+        alt_s = float(station["Altitude"])
+        name = station["Station_Name"]
 
         # nearest grid cell
         i, j = nearest_grid_index(lat_s, lon_s, lats, lons)

@@ -145,3 +145,77 @@ def compute_cumulative_sector_tables(
 
     return dfs, cumulative_masks
 
+def weighted_quantile(x, w, q):
+    """
+    Weighted quantile for 1D arrays.
+    q in [0, 1].
+    """
+    x = np.asarray(x, dtype=float)
+    w = np.asarray(w, dtype=float)
+
+    m = np.isfinite(x) & np.isfinite(w) & (w > 0)
+    x = x[m]
+    w = w[m]
+    if x.size == 0:
+        return np.nan
+
+    order = np.argsort(x)
+    x = x[order]
+    w = w[order]
+
+    cw = np.cumsum(w)
+    cw = cw / cw[-1]
+    return float(np.interp(q, cw, x))
+
+
+
+def sector_stats_unweighted(df, var_col):
+    x = df[var_col].to_numpy(dtype=float)
+    x = x[np.isfinite(x)]
+    if x.size == 0:
+        return {"n": 0, "mean": np.nan, "std": np.nan, "cv": np.nan,
+                "median": np.nan, "q25": np.nan, "q75": np.nan, "iqr": np.nan}
+
+    mean = float(np.mean(x))
+    std = float(np.std(x, ddof=0))
+    median = float(np.median(x))
+    q25 = float(np.quantile(x, 0.25))
+    q75 = float(np.quantile(x, 0.75))
+    iqr = q75 - q25
+    cv = float(std / mean) if np.isfinite(mean) and mean != 0 else np.nan
+
+    return {"n": int(x.size), "mean": mean, "std": std, "cv": cv,
+            "median": median, "q25": q25, "q75": q75, "iqr": iqr}
+
+
+def sector_stats_weighted(df, var_name, w_col="w_area"):
+    vals = pd.to_numeric(df[var_name], errors="coerce").to_numpy(dtype=float)
+    w = pd.to_numeric(df[w_col], errors="coerce").to_numpy(dtype=float)
+
+    m = np.isfinite(vals) & np.isfinite(w) & (w > 0)
+    vals = vals[m]
+    w = w[m]
+
+    if vals.size == 0:
+        return {"n": 0,
+                "mean_w": np.nan, "std_w": np.nan, "cv_w": np.nan,
+                "median_w": np.nan, "q1_w": np.nan, "q3_w": np.nan, "iqr_w": np.nan}
+
+    wsum = float(np.sum(w))
+    mean_w = float(np.sum(w * vals) / wsum)
+
+    var_w = float(np.sum(w * (vals - mean_w) ** 2) / wsum)
+    std_w = float(np.sqrt(var_w))
+    cv_w = float(std_w / mean_w) if mean_w != 0 else np.nan
+
+    q1_w = float(weighted_quantile(vals, w, 0.25))
+    med_w = float(weighted_quantile(vals, w, 0.50))
+    q3_w = float(weighted_quantile(vals, w, 0.75))
+    iqr_w = float(q3_w - q1_w)
+
+    return {"n": int(vals.size),
+            "mean_w": mean_w, "std_w": std_w, "cv_w": cv_w,
+            "median_w": med_w, "q1_w": q1_w, "q3_w": q3_w, "iqr_w": iqr_w}
+
+
+

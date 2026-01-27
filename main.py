@@ -17,13 +17,15 @@ from stations_utils import load_stations, select_station, all_stations, map_stat
 from horizontal_indexing import nearest_grid_index
 from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file,RH_file
 from calculation import (sector_table,compute_sector_tables_generic,
-                        sector_stats,compute_ring_sector_masks,compute_cumulative_sector_tables)
+                        sector_stats,compute_ring_sector_masks,compute_cumulative_sector_tables,
+                        weighted_quantile,sector_stats_unweighted,sector_stats_weighted
+                        )
 from plots import (plot_variable_on_map,plot_rectangles,plot_sector_boxplots,
     plot_profile_P_T,
     plot_profile_T_Z,
     plot_profile_T_logP,
     plot_profile_species_logP,
-    plot_profile_species_Z,save_figure)
+    plot_profile_species_Z,save_figure, plot_sector_boxplots,box_stats_from_df,plot_sector_boxplots_weighted)
 """
 /
 This comment section includes all the variables,the functions,their names
@@ -36,11 +38,11 @@ lat_s
 """
 #%%
 def main():
-    idx=45 #index of station of the stations_file
+    idx=23 #index of station of the stations_file
     name=None #name of the station
     cell_nums = 50 #numb of cells that will get plotted n**2
     d_zoom_species=5.0 #zoom of plots
-    d_zoom_topo=20.0  #zoom of topo in fig3
+    d_zoom_topo=5.0  #zoom of topo in fig3
     zoom_map= 45.0   #extent of map in fig4
     radii = list(range(1, 10)) #(range(1,cell_nums+1))
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
@@ -438,29 +440,59 @@ def main():
     data_arr_ppb,
     species
 )
-    cum_names = [f"C{k}" for k in range(1, len(cum_dfs) + 1)]
-    print("\nCUMULATIVE SECTOR STATISTICS")
+    def add_area_weights(df, lat_col="lat", w_col="w_area"):
+     lat_rad = np.deg2rad(pd.to_numeric(df[lat_col], errors="coerce").to_numpy(dtype=float))
+     w = np.cos(lat_rad)
+     w = np.clip(w, 0.0, None)
+     df[w_col] = w
+     return df
+
+    sector_dfs = [add_area_weights(df.copy()) for df in sector_dfs]
+    cum_dfs    = [add_area_weights(df.copy()) for df in cum_dfs]
+
+    print("\nRING SECTORS (UNWEIGHTED vs AREA-WEIGHTED)")
+    for k, df in enumerate(sector_dfs, start=1):
+     su = sector_stats_unweighted(df, species)
+     sw = sector_stats_weighted(df, species, w_col="w_area")
+     print(
+        f"S{k}: mean={su['mean']:.3f}, std={su['std']:.3f}, cv={su['cv']:.3f}, "
+        f"med={su['median']:.3f}, IQR={su['iqr']:.3f}  ||  "
+        f"mean_w={sw['mean_w']:.3f}, std_w={sw['std_w']:.3f}, cv_w={sw['cv_w']:.3f}, "
+        f"med_w={sw['median_w']:.3f}, IQR_w={sw['iqr_w']:.3f}"
+    )
+    print("\nCUMULATIVE SECTORS (UNWEIGHTED vs AREA-WEIGHTED)")
+
     for k, df in enumerate(cum_dfs, start=1):
-        stats = sector_stats(df, species)
-        print(
-        f"C{k}: n={stats['n']}, "
-        f"CV={stats['cv']:.4f} "
-        f"mean={stats['mean']:.3e}, "
-        f"median={stats['median']:.3e}, "
-        f"IQR={stats['iqr']:.3e}, "
-        )
+     su = sector_stats_unweighted(df, species)
+     sw = sector_stats_weighted(df, species, w_col="w_area")
+     print(
+        f"C{k}: mean={su['mean']:.3f}, std={su['std']:.3f}, cv={su['cv']:.3f}, "
+        f"med={su['median']:.3f}, IQR={su['iqr']:.3f}  ||  "
+        f"mean_w={sw['mean_w']:.3f}, std_w={sw['std_w']:.3f}, cv_w={sw['cv_w']:.3f}, "
+        f"med_w={sw['median_w']:.3f}, IQR_w={sw['iqr_w']:.3f}"
+    )
 
 
-    fig_box, ax_box = plot_sector_boxplots(
-    sector_dfs, var_name=species, sector_names=sector_names,
-    title=f"{species} distributions by sector (radii={radii} in {units_ppb})"
-)
-    fig_cbox, ax_cbox = plot_sector_boxplots(
-    cum_dfs,
-    var_name=species,
-    sector_names=cum_names,
-    title=f"{species} cumulative distributions (up to radius r=1..{cell_nums} in {units_ppb})"
-)
+
+    # Unweighted (your existing)
+    fig_u, ax_u = plot_sector_boxplots(sector_dfs, species,
+                                   sector_names=[f"S{k}" for k in range(1, len(sector_dfs)+1)],
+                                   title=f"{species} ring sectors (UNWEIGHTED)")
+
+# Weighted
+    fig_w, ax_w = plot_sector_boxplots_weighted(sector_dfs, species, w_col="w_area",
+                                            sector_names=[f"S{k}" for k in range(1, len(sector_dfs)+1)],
+                                            title=f"{species} ring sectors (AREA-WEIGHTED)")
+    # Unweighted (your existing)
+    fig_u, ax_u = plot_sector_boxplots(cum_dfs, species,
+                                   sector_names=[f"S{k}" for k in range(1, len(sector_dfs)+1)],
+                                   title=f"{species} cumulative sectors (UNWEIGHTED)")
+
+# Weighted
+    fig_w, ax_w = plot_sector_boxplots_weighted(cum_dfs, species, w_col="w_area",
+                                            sector_names=[f"S{k}" for k in range(1, len(sector_dfs)+1)],
+                                            title=f"{species} cumulative sectors (AREA-WEIGHTED)")
+    
 
     """
     save_figure(fig1, out_dir, f"map_{species}_{name}_{time_str}")
@@ -471,7 +503,7 @@ def main():
     save_figure(fig_SlogP, out_dir, f"map_S_lnP_{species}_{name}_{time_str}")
     save_figure(fig_SZ, out_dir, f"map_S-Z{species}_{name}_{time_str}")
     save_figure(fig_TZ, out_dir, f"map_T-Z{species}_{name}_{time_str}")
-    """
+    
     
     
 
@@ -489,7 +521,8 @@ def main():
     print(f"Stations NOT mapped to surface level: {n_not_surface} / {len(df_levels)}")
     df_levels.to_csv("station_model_level_mapping.csv", index=False)
     print(df_non_surface.head(26))
-
+    
+    """
 
 
 

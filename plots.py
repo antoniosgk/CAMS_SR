@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from matplotlib.patches import Rectangle
+from calculation import weighted_quantile
 import matplotlib.ticker as ticker
 import cartopy.crs as ccrs
 from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
@@ -884,3 +885,68 @@ def plot_sector_boxplots(sector_dfs, var_name, sector_names=None, title=None, ax
         ax.set_title(title)
     ax.grid(True, linestyle="--", alpha=0.4)
     return fig, ax
+
+def plot_sector_boxplots_weighted(sector_dfs, var_name, w_col="w_area",
+                                  sector_names=None, title=None, ax=None):
+    """
+    Weighted boxplots using bxp() and weighted quantiles.
+    Shows Q1/median/Q3 based on weights; whiskers use min/max of values.
+    """
+    if sector_names is None:
+        sector_names = [f"S{k+1}" for k in range(len(sector_dfs))]
+
+    bxp_stats = []
+    for name, df in zip(sector_names, sector_dfs):
+        vals = pd.to_numeric(df[var_name], errors="coerce").to_numpy(dtype=float)
+        w = pd.to_numeric(df[w_col], errors="coerce").to_numpy(dtype=float)
+        m = np.isfinite(vals) & np.isfinite(w) & (w > 0)
+        vals = vals[m]
+        w = w[m]
+
+        if vals.size == 0:
+            q1 = med = q3 = lo = hi = np.nan
+        else:
+            q1 = weighted_quantile(vals, w, 0.25)
+            med = weighted_quantile(vals, w, 0.50)
+            q3 = weighted_quantile(vals, w, 0.75)
+            lo = float(np.nanmin(vals))
+            hi = float(np.nanmax(vals))
+
+        bxp_stats.append(dict(label=name, q1=q1, med=med, q3=q3, whislo=lo, whishi=hi))
+
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.figure
+
+    ax.bxp(bxp_stats, showfliers=False)
+    ax.set_ylabel(var_name)
+    if title:
+        ax.set_title(title)
+    ax.grid(True, linestyle="--", alpha=0.4)
+    return fig, ax
+
+
+def box_stats_from_df(df, var_col, w_col=None, label=""):
+    import numpy as np
+    x = df[var_col].to_numpy(dtype=float)
+
+    if w_col is None:
+        x = x[np.isfinite(x)]
+        q25, med, q75 = np.quantile(x, [0.25, 0.5, 0.75]) if x.size else (np.nan, np.nan, np.nan)
+        lo = np.nanmin(x) if x.size else np.nan
+        hi = np.nanmax(x) if x.size else np.nan
+    else:
+        w = df[w_col].to_numpy(dtype=float)
+        m = np.isfinite(x) & np.isfinite(w) & (w > 0)
+        x = x[m]; w = w[m]
+        if x.size:
+            q25 = weighted_quantile(x, w, 0.25)
+            med = weighted_quantile(x, w, 0.50)
+            q75 = weighted_quantile(x, w, 0.75)
+            lo = np.nanmin(x)
+            hi = np.nanmax(x)
+        else:
+            q25 = med = q75 = lo = hi = np.nan
+
+    return dict(label=label, q1=q25, med=med, q3=q75, whislo=lo, whishi=hi)
