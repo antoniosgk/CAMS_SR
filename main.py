@@ -44,7 +44,7 @@ def main():
     d_zoom_species=5.0 #zoom of plots
     d_zoom_topo=5.0  #zoom of topo in fig3
     zoom_map= 45.0   #extent of map in fig4
-    radii = list(range(1, 10)) #(range(1,cell_nums+1))
+    radii = list(range(1, 4)) #(range(1,cell_nums+1))
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
     fig4_with_topo = False
     #-----------
