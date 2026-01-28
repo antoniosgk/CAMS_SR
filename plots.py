@@ -16,6 +16,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import pandas as pd
 
 
+
 def _sanitize_filename(s: str) -> str:
     # keep it filesystem-safe
     s = re.sub(r"\s+", "_", str(s).strip())
@@ -307,291 +308,7 @@ def plot_rectangles(
     return ax, im
 
 
-'''
 
-
-def plot_variable_on_map(
-    lats_small,           # 1D (Ny,)
-    lons_small,           # 1D (Nx,)
-    data_arr,             # 2D (Ny, Nx)
-    lon_s, lat_s,
-    units="",
-    species_name="var",
-    time_str=None,
-    meta=None,
-    # Option A inputs
-    z_orog_m=None,        # 2D (Ny, Nx) orography height (m) for same domain
-    add_orog_contours=True,
-    # Choose backend
-    backend="cartopy",    # "cartopy" (A) or "folium" (C)
-    # Window around station
-    d=0.4,
-    # Visual tuning
-    field_alpha=0.80,
-    hillshade_alpha=0.35,
-    # Folium tuning
-    folium_tiles="Stamen Terrain",
-    folium_zoom=9,
-):
-    """
-    Returns:
-      - cartopy: (fig, ax, im)
-      - folium : (m, None, None)
-    """
-    lats_small = np.asarray(lats_small, dtype=float)
-    lons_small = np.asarray(lons_small, dtype=float)
-    arr = np.asarray(data_arr, dtype=float)
-
-    # grid
-    LON2D, LAT2D = np.meshgrid(lons_small, lats_small)
-
-    # extent
-    lon_min, lon_max = lon_s - d, lon_s + d
-    lat_min, lat_max = lat_s - d, lat_s + d
-
-    # -------------------------
-    # OPTION C (Folium)
-    # -------------------------
-    if backend.lower() == "folium":
-        # If you don't want Folium, comment out this whole block.
-        import folium
-        import io, base64
-        import matplotlib.pyplot as plt
-        from matplotlib.colors import Normalize
-        import matplotlib.cm as cm
-
-        vmin = np.nanmin(arr)
-        vmax = np.nanmax(arr)
-        norm = Normalize(vmin=vmin, vmax=vmax)
-        cmap = cm.get_cmap("turbo")
-
-        rgba = cmap(norm(arr))
-        rgba[..., -1] = np.where(np.isfinite(arr), field_alpha, 0.0)
-
-        fig_tmp, ax_tmp = plt.subplots(figsize=(6, 6), dpi=220)
-        ax_tmp.axis("off")
-        ax_tmp.imshow(rgba, origin="lower")
-        buf = io.BytesIO()
-        fig_tmp.savefig(buf, format="png", bbox_inches="tight", pad_inches=0, transparent=True)
-        plt.close(fig_tmp)
-        png_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-
-        # bounds from the grid (more correct than lon_s±d)
-        bounds = [[float(lats_small.min()), float(lons_small.min())],
-                  [float(lats_small.max()), float(lons_small.max())]]
-
-        m = folium.Map(location=[lat_s, lon_s], zoom_start=folium_zoom, tiles=None)
-        folium.TileLayer(folium_tiles, name="Terrain").add_to(m)
-
-        folium.raster_layers.ImageOverlay(
-            image=f"data:image/png;base64,{png_b64}",
-            bounds=bounds,
-            opacity=1.0,
-            interactive=True,
-            cross_origin=False,
-            zindex=10,
-        ).add_to(m)
-
-        popup = None
-        if meta is not None:
-            popup = (
-                f"{meta.get('species', species_name)} ({meta.get('units', units)})<br>"
-                f"time: {meta.get('time_str', time_str)}<br>"
-                f"station: {meta.get('station_name','')} "
-                f"({meta.get('station_lat',lat_s):.4f}, {meta.get('station_lon',lon_s):.4f}), "
-                f"alt={meta.get('station_alt',np.nan):.1f} m<br>"
-                f"model: ({meta.get('model_lat',lat_s):.4f}, {meta.get('model_lon',lon_s):.4f}), "
-                f"lev={meta.get('model_level','?')}, p={meta.get('model_p_hPa',np.nan):.2f} hPa"
-            )
-        folium.Marker([lat_s, lon_s], popup=popup).add_to(m)
-        folium.LayerControl().add_to(m)
-
-        return m, None, None
-
-    # -------------------------
-    # OPTION A (Cartopy + PHIS hillshade)
-    # -------------------------
-    # If you don't want Cartopy, comment out this whole block.
-    import matplotlib.pyplot as plt
-    from matplotlib.colors import Normalize
-    import cartopy.crs as ccrs
-    import cartopy.feature as cfeature
-
-    fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()})
-    ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
-
-    # Terrain underlay from your PHIS-derived orography
-    if z_orog_m is not None:
-        z_orog_m = np.asarray(z_orog_m, dtype=float)
-        gy, gx = np.gradient(z_orog_m)
-        shade = 1.0 / np.sqrt(1.0 + gx**2 + gy**2)
-
-        ax.pcolormesh(
-            LON2D, LAT2D, shade,
-            cmap="Greys",
-            shading="auto",
-            alpha=hillshade_alpha,
-            transform=ccrs.PlateCarree(),
-            zorder=0
-        )
-
-        if add_orog_contours:
-            levels = np.arange(0, 7000, 500)
-            cs = ax.contour(
-                LON2D, LAT2D, z_orog_m,
-                levels=levels,
-                linewidths=0.5,
-                alpha=0.5,
-                colors="k",
-                transform=ccrs.PlateCarree(),
-                zorder=1
-            )
-            ax.clabel(cs, inline=True, fontsize=7, fmt="%.0f m")
-
-    ax.add_feature(cfeature.COASTLINE, linewidth=0.6, zorder=2)
-    ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=2)
-
-    norm = Normalize(vmin=np.nanmin(arr), vmax=np.nanmax(arr))
-    im = ax.pcolormesh(
-        LON2D, LAT2D, arr,
-        cmap="turbo",
-        shading="auto",
-        norm=norm,
-        transform=ccrs.PlateCarree(),
-        alpha=field_alpha,
-        zorder=3
-    )
-
-    ax.plot(lon_s, lat_s, "kx", markersize=10, transform=ccrs.PlateCarree(), zorder=4)
-
-    if meta is not None:
-        title = (
-            f"{meta.get('species', species_name)} ({meta.get('units', units)}) at {meta.get('time_str', time_str)}\n"
-            f"Station {meta.get('station_name','')}: ({meta.get('station_lat',lat_s):.4f}, {meta.get('station_lon',lon_s):.4f}), "
-            f"alt={meta.get('station_alt',np.nan):.1f} m | "
-            f"Model: ({meta.get('model_lat',lat_s):.4f}, {meta.get('model_lon',lon_s):.4f}), "
-            f"lev={meta.get('model_level','?')}, p={meta.get('model_p_hPa',np.nan):.2f} hPa"
-        )
-    else:
-        title = f"{species_name} ({units})" + (f" at {time_str}" if time_str else "")
-
-    ax.set_title(title, pad=14)
-    fig.subplots_adjust(top=0.82)
-
-    return fig, ax, im
-
-
-def plot_rectangles(
-    ax_or_map,
-    lats_small,    # 1D
-    lons_small,    # 1D
-    ii, jj,        # center indices in the small domain
-    im=None,       # only used in cartopy
-    units="",
-    species_name="var",
-    time_str=None,
-    meta=None,
-    backend="cartopy",
-):
-    """
-    Returns:
-      - cartopy: (ax, im)
-      - folium : (m, None)
-    """
-    lats_small = np.asarray(lats_small, dtype=float)
-    lons_small = np.asarray(lons_small, dtype=float)
-
-    # center
-    cx = float(lons_small[jj])
-    cy = float(lats_small[ii])
-
-    # grid spacing
-    dlon = float(abs(lons_small[1] - lons_small[0]))
-    dlat = float(abs(lats_small[1] - lats_small[0]))
-
-    sizes = {"S1": 1, "S2": 2, "S3": 3}
-
-    # -------------------------
-    # OPTION C (Folium rectangles)
-    # -------------------------
-    if backend.lower() == "folium":
-        # If you don't want Folium rectangles, comment out this block.
-        import folium
-        m = ax_or_map
-
-        styles = {
-            "S1": dict(color="black", weight=2, fill=False),
-            "S2": dict(color="red", weight=2, fill=False),
-            "S3": dict(color="blue", weight=2, fill=False),
-        }
-
-        for name, r in sizes.items():
-            width = (2 * r + 1) * dlon
-            height = (2 * r + 1) * dlat
-            left = cx - width / 2
-            right = cx + width / 2
-            bottom = cy - height / 2
-            top = cy + height / 2
-
-            folium.Rectangle(
-                bounds=[[bottom, left], [top, right]],
-                tooltip=name,
-                **styles[name]
-            ).add_to(m)
-
-        return m, None
-
-    # -------------------------
-    # OPTION A (Cartopy rectangles)
-    # -------------------------
-    # If you don't want Cartopy rectangles, comment out this block.
-    import matplotlib.pyplot as plt
-    import cartopy.crs as ccrs
-    from matplotlib.patches import Rectangle
-
-    ax = ax_or_map
-
-    rect_styles = {
-        "S1": {"edgecolor": "black", "linewidth": 2},
-        "S2": {"edgecolor": "red",   "linewidth": 2},
-        "S3": {"edgecolor": "blue",  "linewidth": 2},
-    }
-
-    for name, r in sizes.items():
-        width = (2 * r + 1) * dlon
-        height = (2 * r + 1) * dlat
-        left = cx - width / 2
-        bottom = cy - height / 2
-
-        rect = Rectangle(
-            (left, bottom),
-            width,
-            height,
-            facecolor="none",
-            transform=ccrs.PlateCarree(),
-            **rect_styles[name],
-        )
-        ax.add_patch(rect)
-
-    if im is not None:
-        cb = plt.colorbar(im, ax=ax, pad=0.02)
-        cb.set_label(meta.get("units", units) if meta else units)
-
-    if meta is not None:
-        title = (
-            f"{meta.get('species', species_name)} ({meta.get('units', units)}) at {meta.get('time_str', time_str)}\n"
-            f"Station {meta.get('station_name','')}: ({meta.get('station_lat',np.nan):.4f}, {meta.get('station_lon',np.nan):.4f}), "
-            f"alt={meta.get('station_alt',np.nan):.1f} m | "
-            f"Model: ({meta.get('model_lat',np.nan):.4f}, {meta.get('model_lon',np.nan):.4f}), "
-            f"lev={meta.get('model_level','?')}, p={meta.get('model_p_hPa',np.nan):.2f} hPa"
-        )
-        ax.set_title(title, pad=14)
-        ax.figure.subplots_adjust(top=0.82)
-    else:
-        ax.set_title(f"{species_name} with sectors")
-
-    return ax, im
-    '''
 def _sort_by_pressure_with_index(p_hPa, idx_level, *arrays):
     """
     Sort profiles from surface (max p) to top (min p),
@@ -1037,9 +754,195 @@ def plot_cv_cumulative_sectors(stats_unw, stats_w, title=None, ax=None):
     ax.set_xticks(x)
     ax.set_xticklabels([f"C{k}" for k in x])
     ax.grid(True, linestyle="--", alpha=0.4)
+    ax.set_ylim(0.066,0.069)
     ax.legend()
 
     if title:
         ax.set_title(title)
+
+    return fig, ax
+def plot_selected_stations_map(
+    stations_df,
+    station_names,
+    *,
+    d_zoom=10.0,
+    with_topography=True,
+    # topo inputs (optional)
+    lats_terrain=None,
+    lons_terrain=None,
+    z_orog_m=None,
+    terrain_alpha=0.6,
+    proj=None,
+    ax=None,
+    title=None,
+):
+    """
+    Plot ONLY selected stations as red dots, optionally over topography.
+
+    Parameters
+    ----------
+    stations_df : DataFrame
+        Must contain columns: Station_Name, Latitude, Longitude, Altitude
+    station_names : list[str]
+        Names of stations to plot (others are excluded)
+    d_zoom : float
+        Half-width of map in degrees
+    with_topography : bool
+        Whether to draw terrain background
+    lats_terrain, lons_terrain, z_orog_m :
+        Terrain grid (1D lat, 1D lon, 2D elevation in meters)
+    """
+
+    import numpy as np
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import Normalize
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    if proj is None:
+        proj = ccrs.PlateCarree()
+
+    if ax is None:
+        fig, ax = plt.subplots(subplot_kw={"projection": proj})
+    else:
+        fig = ax.figure
+
+    # --------------------------------------------------
+    # Filter stations (EXCLUDE ALL OTHERS)
+    # --------------------------------------------------
+    df = stations_df[stations_df["Station_Name"].isin(station_names)].copy()
+    if df.empty:
+        raise ValueError("No matching stations found.")
+
+    lats = df["Latitude"].to_numpy(float)
+    lons = df["Longitude"].to_numpy(float)
+
+    # Map extent centered on mean location
+    lon_c = np.mean(lons)
+    lat_c = np.mean(lats)
+    ax.set_extent(
+        [68, 140,
+         10 , 60],
+        crs=proj,
+    )
+        # --------------------------------------------------
+    # Gridlines + degree labels
+    # --------------------------------------------------
+    gl = ax.gridlines(
+        crs=ccrs.PlateCarree(),
+        draw_labels=True,
+        linewidth=0.6,
+        linestyle="--",
+        alpha=0.5,
+        zorder=6,
+    )
+
+    gl.top_labels = False
+    gl.right_labels = False
+
+    # Degree formatting (°)
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
+
+    step = 10  # degrees
+
+    lon_min_i = int(np.floor((lon_c - d_zoom) / step) * step)
+    lon_max_i = int(np.ceil((lon_c + d_zoom) / step) * step)
+    lat_min_i = int(np.floor((lat_c - d_zoom) / step) * step)
+    lat_max_i = int(np.ceil((lat_c + d_zoom) / step) * step)
+
+    lon_ticks = np.arange(lon_min_i, lon_max_i + step, step)
+    lat_ticks = np.arange(lat_min_i, lat_max_i + step, step)
+
+    gl.xlocator = ticker.FixedLocator(lon_ticks)
+    gl.ylocator = ticker.FixedLocator(lat_ticks)
+
+    gl.xlabel_style = {"size": 9}
+    gl.ylabel_style = {"size": 9}
+
+
+    # --------------------------------------------------
+    # Optional TOPOGRAPHY
+    # --------------------------------------------------
+    terrain_im = None
+    if with_topography:
+        if lats_terrain is None or lons_terrain is None or z_orog_m is None:
+            raise ValueError("Topography requested but terrain arrays not provided.")
+
+        LON_T, LAT_T = np.meshgrid(lons_terrain, lats_terrain)
+        z = np.asarray(z_orog_m, float)
+
+        # Mask sea (<= 0 m)
+        z = np.ma.masked_where(z <= 0.0, z)
+
+        terrain_im = ax.pcolormesh(
+            LON_T, LAT_T, z,
+            cmap="terrain",
+            shading="auto",
+            alpha=terrain_alpha,
+            transform=ccrs.PlateCarree(),
+            zorder=0,
+        )
+
+    # --------------------------------------------------
+    # Map features
+    # --------------------------------------------------
+    ax.add_feature(cfeature.OCEAN, facecolor="lightblue", zorder=-1)
+    ax.add_feature(cfeature.COASTLINE, linewidth=0.8, zorder=2)
+    ax.add_feature(cfeature.BORDERS, linewidth=0.5, zorder=2)
+
+    # --------------------------------------------------
+    # Plot selected stations ONLY
+    # --------------------------------------------------
+    ax.scatter(
+        lons, lats,
+        s=35,
+        c="red",
+        edgecolor="black",
+        transform=ccrs.PlateCarree(),
+        zorder=5,
+        label="Selected stations",
+    )
+    '''
+    # Optional labels
+    for _, r in df.iterrows():
+        ax.text(
+            float(r["Longitude"]), float(r["Latitude"]),str(r["Station_Name"]),
+            fontsize=8,
+            transform=ccrs.PlateCarree(),
+            ha="left", va="bottom",
+            zorder=6
+)   '''
+    
+    ax.legend(loc="upper right")
+
+    # --------------------------------------------------
+    # Colorbar for terrain ONLY
+    # --------------------------------------------------
+    # --------------------------------------------------
+# Title (make it visible even with gridliner labels)
+# --------------------------------------------------
+    if title is None:
+     title = "Selected stations" + (" over topography" if with_topography else "")
+
+# Use a larger pad + explicit y to avoid gridliner label overlap
+    ax.set_title(title, fontsize=12, pad=22, y=1.02)
+
+# --------------------------------------------------
+# Terrain colorbar on the LEFT (Cartopy-safe: manual axes)
+# --------------------------------------------------
+    if terrain_im is not None:
+    # Reserve space for the left colorbar and top title
+     fig.subplots_adjust(left=0.12, right=0.92, top=0.90, bottom=0.08)
+
+    # Create a colorbar axes manually (no projection issues)
+     bbox = ax.get_position()
+     cax = fig.add_axes([bbox.x0 - 0.2, bbox.y0, 0.02, bbox.height])  # [left, bottom, width, height]
+     cb = fig.colorbar(terrain_im, cax=cax)
+     cb.set_label("Elevation (m)")
+    else:
+     fig.subplots_adjust(top=0.90)
+
 
     return fig, ax

@@ -25,7 +25,8 @@ from plots import (plot_variable_on_map,plot_rectangles,plot_sector_boxplots,
     plot_profile_T_Z,
     plot_profile_T_logP,
     plot_profile_species_logP,
-    plot_profile_species_Z,save_figure, plot_sector_boxplots,box_stats_from_df,plot_sector_boxplots_weighted)
+    plot_profile_species_Z,save_figure, plot_sector_boxplots,box_stats_from_df,plot_sector_boxplots_weighted
+    ,plot_selected_stations_map)
 """
 /
 This comment section includes all the variables,the functions,their names
@@ -38,11 +39,11 @@ lat_s
 """
 #%%
 def main():
-    idx=23 #index of station of the stations_file
-    name=None #name of the station
+    idx=5 #index of station of the stations_file,can be put to None
+    name=None #name of the station,can be put to None
     cell_nums = 30 #numb of cells that will get plotted n**2
-    d_zoom_species=5.0 #zoom of plots
-    d_zoom_topo=5.0  #zoom of topo in fig3
+    d_zoom_species=0.6 #zoom of plots
+    d_zoom_topo=20.0  #zoom of topo in fig3,5
     zoom_map= 45.0   #extent of map in fig4
     radii = list(range(1, cell_nums+1)) #(range(1,cell_nums+1))
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
@@ -489,7 +490,7 @@ def main():
 
 
 
-    # Unweighted (your existing)
+    # Unweighted 
     fig_u, ax_u = plot_sector_boxplots(sector_dfs, species,
                                    sector_names=[f"S{k}" for k in range(1, len(sector_dfs)+1)],
                                    title=f"{species} ring sectors (UNWEIGHTED)")
@@ -498,7 +499,7 @@ def main():
     fig_w, ax_w = plot_sector_boxplots_weighted(sector_dfs, species, w_col="w_area",
                                             sector_names=[f"S{k}" for k in range(1, len(sector_dfs)+1)],
                                             title=f"{species} ring sectors (AREA-WEIGHTED)")
-    # Unweighted (your existing)
+    # Unweighted 
     fig_u, ax_u = plot_sector_boxplots(cum_dfs, species,
                                    sector_names=[f"S{k}" for k in range(1, len(sector_dfs)+1)],
                                    title=f"{species} cumulative sectors (UNWEIGHTED)")
@@ -521,6 +522,20 @@ def main():
     title=f"{species} CV — cumulative sectors"
 )
 
+    fig5, ax5 = plot_selected_stations_map(
+    stations_df=stations,
+    station_names=["1035A","1280A","1344A","1414A","1417A","1425A",
+                   "1438A","1439A","1451A","1477A","1614A",
+                   "1772A","1810A","1905A","1930A","2165A","2209A","2331A",
+                   "2428A","2447A","2642A","2660A","2914A","3014A",
+                   "3015A","3439A"],
+    d_zoom=50,
+    with_topography=True,
+    lats_terrain=lats_bg,
+    lons_terrain=lons_bg,
+    z_orog_m=z_orog_bg,
+    title="Selected stations over topography",
+)
 
     
 
