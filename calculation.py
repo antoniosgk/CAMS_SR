@@ -216,6 +216,83 @@ def sector_stats_weighted(df, var_name, w_col="w_area"):
     return {"n": int(vals.size),
             "mean_w": mean_w, "std_w": std_w, "cv_w": cv_w,
             "median_w": med_w, "q1_w": q1_w, "q3_w": q3_w, "iqr_w": iqr_w}
+# calculation.py
+import numpy as np
+import pandas as pd
+
+EARTH_RADIUS_KM = 6371.0
+
+
+def haversine_km(lat1, lon1, lat2, lon2):
+    """
+    Vectorized haversine distance (km).
+    lat/lon in degrees.
+    """
+    lat1 = np.deg2rad(lat1)
+    lon1 = np.deg2rad(lon1)
+    lat2 = np.deg2rad(lat2)
+    lon2 = np.deg2rad(lon2)
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = np.sin(dlat / 2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    return EARTH_RADIUS_KM * c
+def build_distance_dataframe(
+    lats_small,
+    lons_small,
+    data_arr,
+    lat_s,
+    lon_s,
+    var_name,
+    w_area=None,
+):
+    """
+    Create DataFrame with distance (km) from station for each grid cell.
+    """
+    if lats_small.ndim == 1 and lons_small.ndim == 1:
+        LON2D, LAT2D = np.meshgrid(lons_small, lats_small)
+    else:
+        LAT2D = lats_small
+        LON2D = lons_small
+
+    dist_km = haversine_km(lat_s, lon_s, LAT2D, LON2D)
+
+    df = pd.DataFrame({
+        "lat": LAT2D.ravel(),
+        "lon": LON2D.ravel(),
+        "distance_km": dist_km.ravel(),
+        var_name: data_arr.ravel(),
+    })
+
+    if w_area is not None:
+        df["w_area"] = w_area.ravel()
+
+    return df
+def stats_by_distance_bins(
+    df,
+    var_name,
+    dist_bins_km,
+    w_col=None,
+):
+    """
+    Compute stats per distance bin.
+    """
+    records = []
+
+    for dmax in dist_bins_km:
+        sub = df[df["distance_km"] <= dmax]
+
+        if w_col is None:
+            stats = sector_stats_unweighted(sub, var_name)
+        else:
+            stats = sector_stats_weighted(sub, var_name, w_col=w_col)
+
+        stats["dmax_km"] = dmax
+        records.append(stats)
+
+    return pd.DataFrame(records)
 
 
 

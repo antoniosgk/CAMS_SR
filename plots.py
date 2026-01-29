@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from matplotlib.patches import Rectangle
-from calculation import weighted_quantile
+from calculation import weighted_quantile, haversine_km
 import matplotlib.ticker as ticker
 import cartopy.crs as ccrs
 from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
@@ -946,3 +946,73 @@ def plot_selected_stations_map(
 
 
     return fig, ax
+def plot_cv_vs_distance(df_unw, df_w=None, ax=None, title=None):
+    """
+    Line plot of CV vs distance.
+    """
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.figure
+
+    ax.plot(df_unw["dmax_km"], df_unw["cv"], marker="o", label="Unweighted")
+    
+    if df_w is not None:
+        ax.plot(df_w["dmax_km"], df_w["cv_w"], marker="s", label="Area-weighted")
+
+    ax.set_xlabel("Distance from station (km)")
+    ax.set_ylabel("Coefficient of Variation")
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
+
+    if title:
+        ax.set_title(title)
+
+    return fig, ax
+def plot_cv_map(
+    lats_small,
+    lons_small,
+    data_arr,
+    lat_s,
+    lon_s,
+    window_km,
+    proj=None,
+    ax=None,
+):
+    """
+    Map showing local CV computed in a moving window.
+    """
+    if proj is None:
+        proj = ccrs.PlateCarree()
+
+    if ax is None:
+        fig, ax = plt.subplots(subplot_kw={"projection": proj})
+    else:
+        fig = ax.figure
+
+    # compute distance field
+    LON2D, LAT2D = np.meshgrid(lons_small, lats_small)
+    dist = haversine_km(lat_s, lon_s, LAT2D, LON2D)
+
+    mask = dist <= window_km
+    vals = np.where(mask, data_arr, np.nan)
+
+    # local CV (global within window)
+    mean = np.nanmean(vals)
+    std = np.nanstd(vals)
+    cv = std / mean if mean != 0 else np.nan
+
+    im = ax.pcolormesh(
+        LON2D, LAT2D, vals,
+        cmap="viridis",
+        shading="auto",
+        transform=ccrs.PlateCarree(),
+    )
+
+    ax.plot(lon_s, lat_s, "rx", markersize=10, transform=ccrs.PlateCarree())
+    ax.set_title(f"Species field within {window_km} km (CV={cv:.3f})")
+
+    plt.colorbar(im, ax=ax, label="Species")
+
+    return fig, ax, cv
+

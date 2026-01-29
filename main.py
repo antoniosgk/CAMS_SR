@@ -18,7 +18,7 @@ from horizontal_indexing import nearest_grid_index
 from file_utils import stations_path, species_file, T_file, pl_file,species,orog_file,RH_file
 from calculation import (sector_table,compute_sector_tables_generic,
                         sector_stats,compute_ring_sector_masks,compute_cumulative_sector_tables,
-                        weighted_quantile,sector_stats_unweighted,sector_stats_weighted
+                        weighted_quantile,sector_stats_unweighted,sector_stats_weighted,build_distance_dataframe,stats_by_distance_bins
                         )
 from plots import (plot_variable_on_map,plot_rectangles,plot_sector_boxplots,
     plot_profile_P_T,plot_cv_cumulative_sectors,plot_cv_ring_sectors,
@@ -26,7 +26,7 @@ from plots import (plot_variable_on_map,plot_rectangles,plot_sector_boxplots,
     plot_profile_T_logP,
     plot_profile_species_logP,
     plot_profile_species_Z,save_figure, plot_sector_boxplots,box_stats_from_df,plot_sector_boxplots_weighted
-    ,plot_selected_stations_map)
+    ,plot_selected_stations_map,plot_cv_vs_distance)
 """
 /
 This comment section includes all the variables,the functions,their names
@@ -39,15 +39,19 @@ lat_s
 """
 #%%
 def main():
+    ###########################################
     idx=5 #index of station of the stations_file,can be put to None
     name=None #name of the station,can be put to None
-    cell_nums = 30 #numb of cells that will get plotted n**2
+    cell_nums = 5 #numb of cells that will get plotted n**2
     d_zoom_species=0.6 #zoom of plots
     d_zoom_topo=20.0  #zoom of topo in fig3,5
     zoom_map= 45.0   #extent of map in fig4
     radii = list(range(1, cell_nums+1)) #(range(1,cell_nums+1))
+    dist_bins_km = [1, 5, 10, 20, 50, 100]
+
     out_dir="/home/agkiokas/CAMS/plots/" #where the plots are saved
     fig4_with_topo = False
+    ####################################################
     #-----------
     stations = load_stations(stations_path)
     station = select_station(stations, idx)
@@ -536,8 +540,35 @@ def main():
     z_orog_m=z_orog_bg,
     title="Selected stations over topography",
 )
+    LON2D, LAT2D = np.meshgrid(lons_small, lats_small)
 
-    
+# area proxy for regular lat-lon grid: proportional to cos(latitude)
+    w_area = np.cos(np.deg2rad(LAT2D))  # shape (Ny, Nx)
+    w_area = np.clip(w_area, 0.0, None) # safety
+    df_dist = build_distance_dataframe(
+    lats_small,
+    lons_small,
+    data_arr_ppb,
+    lat_s,
+    lon_s,
+    species,
+    w_area=w_area,
+)
+
+    df_cv_unw = stats_by_distance_bins(
+    df_dist, species, dist_bins_km
+)
+
+    df_cv_w = stats_by_distance_bins(
+    df_dist, species, dist_bins_km, w_col="w_area"
+)
+
+    fig, ax = plot_cv_vs_distance(
+    df_cv_unw,
+    df_cv_w,
+    title=f"{species} CV vs distance ({name})"
+)
+ 
 
     """
     save_figure(fig1, out_dir, f"map_{species}_{name}_{time_str}")
